@@ -1,4 +1,5 @@
 use core::fmt;
+use core::ptr::write_volatile;
 
 /// VGA text mode color.
 #[allow(dead_code)]
@@ -88,7 +89,7 @@ pub struct Writer {
 unsafe impl Send for Writer {}
 
 impl Writer {
-    /// Write a single byte to the buffer.
+    /// Write a single byte to the buffer using volatile writes.
     pub fn write_byte(&mut self, byte: u8) {
         match byte {
             b'\n' => self.new_line(),
@@ -101,10 +102,13 @@ impl Writer {
                 let col = self.column_position;
 
                 unsafe {
-                    (*self.buffer)[row][col] = ScreenChar {
-                        ascii_character: byte,
-                        color_code: self.color_code,
-                    };
+                    write_volatile(
+                        &mut (*self.buffer)[row][col],
+                        ScreenChar {
+                            ascii_character: byte,
+                            color_code: self.color_code,
+                        },
+                    );
                 }
                 self.column_position += 1;
             }
@@ -116,7 +120,8 @@ impl Writer {
         for row in 1..BUFFER_HEIGHT {
             for col in 0..BUFFER_WIDTH {
                 unsafe {
-                    (*self.buffer)[row - 1][col] = (*self.buffer)[row][col];
+                    let val = (*self.buffer)[row][col];
+                    write_volatile(&mut (*self.buffer)[row - 1][col], val);
                 }
             }
         }
@@ -131,7 +136,7 @@ impl Writer {
         };
         for col in 0..BUFFER_WIDTH {
             unsafe {
-                (*self.buffer)[row][col] = blank;
+                write_volatile(&mut (*self.buffer)[row][col], blank);
             }
         }
     }

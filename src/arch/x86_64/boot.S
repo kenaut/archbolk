@@ -7,8 +7,8 @@ _start:
     movl    %eax, %edi
     movl    %ebx, %esi
 
-    # Set up stack
-    movl    $0x7000, %esp
+    # Set up stack at 0x80000 (512 KiB stack, grows down to 0x00000)
+    movl    $0x80000, %esp
 
     # Check multiboot magic
     cmpl    $0x36d76289, %eax
@@ -26,9 +26,9 @@ _start:
     movl    $0x1000, %edi
     movl    %edi, %cr3
 
-    # Clear 4 pages (PML4 + PDP + 2 PD entries)
+    # Clear 12 pages (PML4 + PDP + PD = 3 × 4 KiB)
     xorl    %eax, %eax
-    movl    $4096, %ecx
+    movl    $12288, %ecx
     rep     stosb
 
     # PML4[0] -> PDP at 0x2000
@@ -39,16 +39,20 @@ _start:
     movl    $0x2000, %edi
     movl    $0x3003, (%edi)
 
-    # PD[0] -> 2 MiB huge page (0x00000083)
+    # PD[0] -> 2 MiB huge page (0x00000083) — covers 0x000000-0x1FFFFF
     movl    $0x3000, %edi
     movl    $0x00000083, (%edi)
+
+    # PD[1] -> 2 MiB huge page (0x00200083) — covers 0x200000-0x3FFFFF (VGA buffer at 0xB8000)
+    movl    $0x3000, %edi
+    movl    $0x00200083, 8(%edi)
 
     # Enable PAE
     movl    %cr4, %eax
     orl     $0x20, %eax
     movl    %eax, %cr4
 
-    # Build GDT at a fixed location (0x800, below stack at 0x7000)
+    # Build GDT at a fixed location (0x800, below stack at 0x80000)
     # This avoids linker moving .quad constants to .rodata
     movl    $0x800, %edi
     movl    $0, (%edi)              # null descriptor (bytes 0-3)
@@ -98,10 +102,14 @@ _start_64:
     movw    %ax, %gs
     movw    %ax, %ss
 
-    # Set up stack
-    movq    $0x7000, %rsp
+    # Set up stack at 0x80000 (512 KiB stack, grows down to 0x00000)
+    movq    $0x80000, %rsp
 
-    # Call Rust entry
+    # Pass Multiboot2 info pointer (saved in esi) as first argument (rdi)
+    # mov %esi, %edi zero-extends esi into rdi (x86_64 implicit zero-extend)
+    mov     %esi, %edi
+
+    # Call Rust entry with mbi_addr in rdi
     call    _start_rust
 
     # Should never return

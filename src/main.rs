@@ -1,13 +1,32 @@
 #![no_std]
 #![no_main]
 
+extern crate alloc;
+
 mod vga_buffer;
 mod serial;
+mod memory;
 
 use core::panic::PanicInfo;
 
 #[panic_handler]
-fn panic(_info: &PanicInfo) -> ! {
+fn panic(info: &PanicInfo) -> ! {
+    use core::fmt::Write;
+    if let Some(location) = info.location() {
+        let _ = write!(
+            *crate::serial::SERIAL.lock(),
+            "PANIC at {}:{}: {}",
+            location.file(),
+            location.line(),
+            info.message()
+        );
+    } else {
+        let _ = write!(
+            *crate::serial::SERIAL.lock(),
+            "PANIC: {}",
+            info.message()
+        );
+    }
     loop {}
 }
 
@@ -31,32 +50,19 @@ static MULTIBOOT2_HEADER: [u8; 24] = {
 };
 
 /// Rust entry point — called from the 64-bit boot assembly.
+/// `mbi_addr` is the physical address of the Multiboot2 info structure.
 #[unsafe(no_mangle)]
-pub extern "C" fn _start_rust() -> ! {
-    // Write directly to VGA buffer at 0xB8000 using inline asm
-    // to avoid Rust's debug-mode UB checks on pointer arithmetic.
-    let msg = b"archbolk kernel booting...\n";
-    let mut i = 0usize;
-    while i < msg.len() {
-        let byte = msg[i];
-        unsafe {
-            core::arch::asm!(
-                "mov byte ptr [{vga} + {off}], {byte}",
-                "mov byte ptr [{vga} + {off} + 1], 0x02",
-                vga = in(reg) 0xB8000usize,
-                off = in(reg) i * 2,
-                byte = in(reg_byte) byte,
-            );
-        }
-        i += 1;
-    }
+pub extern "C" fn _start_rust(mbi_addr: usize) -> ! {
+    println!("archbolk kernel booting...");
+    println!("Running in 64-bit long mode.");
 
     // Initialize serial port
     serial::SERIAL.lock().init();
     serial::SERIAL.unlock();
-
-    // Print via serial
     serial_println!("archbolk serial output OK");
+
+    // Initialize memory subsystem
+    memory::init(mbi_addr);
 
     loop {}
 }

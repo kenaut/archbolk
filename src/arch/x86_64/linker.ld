@@ -37,9 +37,12 @@ SECTIONS {
         *(.bss .bss.*)
     }
 
+    _kernel_end = .;
+
     /DISCARD/ : {
         *(.comment)
         *(.eh_frame)
+        *(.eh_frame_hdr)
         *(.note.gnu.build-id)
     }
 }
