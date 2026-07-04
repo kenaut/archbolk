@@ -6,6 +6,8 @@ extern crate alloc;
 mod vga_buffer;
 mod serial;
 mod memory;
+mod interrupts;
+mod keyboard;
 
 use core::panic::PanicInfo;
 
@@ -64,5 +66,28 @@ pub extern "C" fn _start_rust(mbi_addr: usize) -> ! {
     // Initialize memory subsystem
     memory::init(mbi_addr);
 
-    loop {}
+    // Initialize interrupt subsystem (IDT, PIC, PIT)
+    interrupts::init();
+    serial_println!("Interrupt subsystem initialized");
+
+    // Unmask IRQ0 (PIT timer) and IRQ1 (keyboard)
+    interrupts::pic::unmask(0);
+    interrupts::pic::unmask(1);
+
+    // Initialize PS/2 keyboard
+    keyboard::init();
+
+    serial_println!("Keyboard driver ready. Type on the serial console:");
+
+    // Enable interrupts
+    unsafe {
+        core::arch::asm!("sti");
+    }
+
+    // Simple keyboard echo loop
+    loop {
+        if let Some(ch) = keyboard::read_key() {
+            serial_print!("{}", ch as char);
+        }
+    }
 }
