@@ -81,7 +81,7 @@ impl<T> SpinLock<T> {
 
 /// A writer for the VGA text buffer.
 pub struct Writer {
-    column_position: usize,
+    pub column_position: usize,
     color_code: ColorCode,
     buffer: *mut [[ScreenChar; BUFFER_WIDTH]; BUFFER_HEIGHT],
 }

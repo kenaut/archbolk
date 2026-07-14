@@ -28,50 +28,59 @@ const KBD_CMD_RESET: u8 = 0xFF;
 const KBD_ACK: u8 = 0xFA;
 const KBD_SELF_TEST_OK: u8 = 0xAA;
 
-// ── Ring buffer ─────────────────────────────────────────────────────────
+// ── Lock-free ring buffer ───────────────────────────────────────────────
+/// Single-producer (ISR), single-consumer (main loop) ring buffer.
+/// Uses atomic head/tail so no mutex is needed.
 const RING_CAPACITY: usize = 256;
 
 struct RingBuffer {
-    buf: [u8; RING_CAPACITY],
-    head: usize, // next write position
-    tail: usize, // next read position
+    buf: [core::cell::UnsafeCell<u8>; RING_CAPACITY],
+    /// Next write position (written only by ISR).
+    head: core::sync::atomic::AtomicUsize,
+    /// Next read position (written only by main loop).
+    tail: core::sync::atomic::AtomicUsize,
 }
+
+unsafe impl Sync for RingBuffer {}
 
 impl RingBuffer {
     const fn new() -> Self {
+        const INIT: core::cell::UnsafeCell<u8> = core::cell::UnsafeCell::new(0);
         RingBuffer {
-            buf: [0; RING_CAPACITY],
-            head: 0,
-            tail: 0,
+            buf: [INIT; RING_CAPACITY],
+            head: core::sync::atomic::AtomicUsize::new(0),
+            tail: core::sync::atomic::AtomicUsize::new(0),
         }
     }
 
-    fn push(&mut self, val: u8) -> bool {
-        let next = (self.head + 1) % RING_CAPACITY;
-        if next == self.tail {
-            return false; // full
+    /// Push from ISR context. Returns false if full.
+    fn push(&self, val: u8) -> bool {
+        let head = self.head.load(core::sync::atomic::Ordering::Relaxed);
+        let tail = self.tail.load(core::sync::atomic::Ordering::Acquire);
+        let next = (head + 1) % RING_CAPACITY;
+        if next == tail {
+            return false;
         }
-        self.buf[self.head] = val;
-        self.head = next;
+        unsafe { *self.buf[head].get() = val; }
+        self.head.store(next, core::sync::atomic::Ordering::Release);
         true
     }
 
-    fn pop(&mut self) -> Option<u8> {
-        if self.tail == self.head {
+    /// Pop from main loop. Returns None if empty.
+    fn pop(&self) -> Option<u8> {
+        let tail = self.tail.load(core::sync::atomic::Ordering::Relaxed);
+        let head = self.head.load(core::sync::atomic::Ordering::Acquire);
+        if tail == head {
             return None;
         }
-        let val = self.buf[self.tail];
-        self.tail = (self.tail + 1) % RING_CAPACITY;
+        let val = unsafe { *self.buf[tail].get() };
+        self.tail.store((tail + 1) % RING_CAPACITY, core::sync::atomic::Ordering::Release);
         Some(val)
-    }
-
-    fn is_empty(&self) -> bool {
-        self.tail == self.head
     }
 }
 
 // ── Global state ────────────────────────────────────────────────────────
-static RING: spin::Mutex<RingBuffer> = spin::Mutex::new(RingBuffer::new());
+static RING: RingBuffer = RingBuffer::new();
 static KEYBOARD_INITIALIZED: AtomicBool = AtomicBool::new(false);
 
 /// Whether the left/right Shift, Ctrl, Alt are held.
@@ -261,35 +270,18 @@ pub fn irq_handler() {
         // Break code — key = set1 scancode
         let key = scancode & 0x7F;
         match key {
-            // Modifier keys (Set 1)
+            // Modifier keys (Set 1) — release
             0x2A | 0x36 => SHIFT.store(false, Ordering::Relaxed),
             0x1D => CTRL.store(false, Ordering::Relaxed),
             0x38 => ALT.store(false, Ordering::Relaxed),
-            // Toggle keys (Set 1)
-            0x3A => {
-                let new = !CAPS_LOCK.load(Ordering::Relaxed);
-                CAPS_LOCK.store(new, Ordering::Relaxed);
-                update_leds();
-            }
-            0x45 => {
-                let new = !NUM_LOCK.load(Ordering::Relaxed);
-                NUM_LOCK.store(new, Ordering::Relaxed);
-                update_leds();
-            }
-            0x46 => {
-                let new = !SCROLL_LOCK.load(Ordering::Relaxed);
-                SCROLL_LOCK.store(new, Ordering::Relaxed);
-                update_leds();
-            }
+            // Toggle keys — ignore break (handled on make)
+            0x3A | 0x45 | 0x46 => {}
             // Printable keys — enqueue
             _ => {
                 let shift = SHIFT.load(Ordering::Relaxed);
                 let caps = CAPS_LOCK.load(Ordering::Relaxed);
                 if let Some(ch) = scancode_to_ascii(key, shift, caps) {
-                    // Try to push — if ring buffer is locked by main loop, skip
-                    if let Some(mut ring) = RING.try_lock() {
-                        ring.push(ch);
-                    }
+                    RING.push(ch);
                 }
             }
         }
@@ -301,6 +293,22 @@ pub fn irq_handler() {
         0x2A | 0x36 => SHIFT.store(true, Ordering::Relaxed),
         0x1D => CTRL.store(true, Ordering::Relaxed),
         0x38 => ALT.store(true, Ordering::Relaxed),
+        // Toggle keys — toggle on make (press), ignore break
+        0x3A => {
+            let new = !CAPS_LOCK.load(Ordering::Relaxed);
+            CAPS_LOCK.store(new, Ordering::Relaxed);
+            update_leds();
+        }
+        0x45 => {
+            let new = !NUM_LOCK.load(Ordering::Relaxed);
+            NUM_LOCK.store(new, Ordering::Relaxed);
+            update_leds();
+        }
+        0x46 => {
+            let new = !SCROLL_LOCK.load(Ordering::Relaxed);
+            SCROLL_LOCK.store(new, Ordering::Relaxed);
+            update_leds();
+        }
         _ => {}
     }
 }
@@ -317,7 +325,7 @@ fn update_leds() {
 // ── Public API ──────────────────────────────────────────────────────────
 /// Read the next keypress from the ring buffer, or `None` if empty.
 pub fn read_key() -> Option<u8> {
-    RING.lock().pop()
+    RING.pop()
 }
 
 /// Check whether the keyboard is initialized.

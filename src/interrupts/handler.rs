@@ -112,6 +112,7 @@ fn handle_irq(irq: u8) {
         0 => {
             // PIT timer tick
             super::pit_tick();
+            crate::scheduler::timer_tick();
         }
         1 => {
             // PS/2 keyboard IRQ

@@ -23,6 +23,10 @@ SECTIONS {
         *(.rodata .rodata.*)
     }
 
+    .note.Xen : ALIGN(4) {
+        KEEP(*(.note.Xen))
+    }
+
     .got : ALIGN(4K) {
         *(.got)
     }

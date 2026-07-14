@@ -317,3 +317,102 @@ isr_stub 252, 0
 isr_stub 253, 0
 isr_stub 254, 0
 isr_stub 255, 0
+
+/* ── Syscall entry point (SYSCALL instruction target) ────────────────────
+ *
+ * On entry:
+ *   RCX = return RIP (set by SYSCALL)
+ *   R11 = original RFLAGS (set by SYSCALL)
+ *   RAX = syscall number
+ *   RDI, RSI, RDX, R10, R8, R9 = arguments 1-6
+ *
+ * We must save all registers that the C ABI expects the callee to preserve
+ * (rbx, rbp, r12-r15), plus rcx and r11 which hold the return address and
+ * flags.  We also save rax (return value slot) and the argument registers
+ * so the handler can inspect them.
+ *
+ * Stack layout (top to bottom, RSP after all pushes):
+ *   [original RAX]   <- offset 0
+ *   [original RCX]   <- offset 8  (return RIP)
+ *   [original R11]   <- offset 16 (return RFLAGS)
+ *   [original RDI]   <- offset 24
+ *   [original RSI]   <- offset 32
+ *   [original RDX]   <- offset 40
+ *   [original R10]   <- offset 48
+ *   [original R8]    <- offset 56
+ *   [original R9]    <- offset 64
+ *   [RBX]            <- offset 72
+ *   [RBP]            <- offset 80
+ *   [R12]            <- offset 88
+ *   [R13]            <- offset 96
+ *   [R14]            <- offset 104
+ *   [R15]            <- offset 112  <- RSP
+ *
+ * After the handler returns, RAX holds the return value.
+ */
+.globl syscall_entry
+syscall_entry:
+    /* Check if we came from ring 0 (kernel) or ring 3 (user).
+     * SYSCALL from ring 0: CS stays ring 0, we can ret.
+     * SYSCALL from ring 3: CS becomes ring 0, we must sysretq.
+     * We read the saved CS from the stack... actually SYSCALL doesn't
+     * push CS.  Instead, check the original CS by reading it now
+     * (before we modify anything).  But SYSCALL doesn't save CS.
+     *
+     * Simpler approach: always use a kernel-compatible return.
+     * We'll use ret for now (works from ring 0).
+     * When user mode is implemented, we'll switch to sysretq.
+     */
+    /* Save all registers on the caller's stack.
+     * No stack switch needed — we're called from ring 0 (kernel),
+     * so the caller's stack is valid and we must preserve it.
+     * (A stack switch would only be needed for ring-3 callers.) */
+
+    /* Save all registers */
+    push    r15
+    push    r14
+    push    r13
+    push    r12
+    push    rbp
+    push    rbx
+    push    r9
+    push    r8
+    push    r10
+    push    rdx
+    push    rsi
+    push    rdi
+    push    r11
+    push    rcx
+    push    rax
+
+    /* First argument: pointer to the saved register block (RSP) */
+    mov     rdi, rsp
+
+    /* Call the Rust syscall handler */
+    call    syscall_handler
+
+    /* Restore registers.
+     * After call returns, RSP points at frame.rax (the first pushed value).
+     * The call's return address was above the saved block and was consumed
+     * by ret, so RSP is back at the top of the saved register block. */
+    pop     rax             /* load return value from frame.rax */
+    pop     rcx             /* return RIP */
+    pop     r11             /* return RFLAGS */
+    pop     rdi
+    pop     rsi
+    pop     rdx
+    pop     r10
+    pop     r8
+    pop     r9
+    pop     rbx
+    pop     rbp
+    pop     r12
+    pop     r13
+    pop     r14
+    pop     r15
+
+    /* Return via ret (works from ring 0).
+     * When user mode is added, check CS and use sysretq for ring-3 callers.
+     * Push return address (rcx) back onto stack for ret. */
+    push    rcx
+    ret

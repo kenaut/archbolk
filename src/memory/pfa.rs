@@ -51,6 +51,51 @@ impl FrameAllocator {
 /// Global physical frame allocator instance.
 pub static FRAME_ALLOCATOR: spin::Mutex<FrameAllocator> = spin::Mutex::new(FrameAllocator::new());
 
+/// Initialize the frame allocator from a raw memory map (PVH boot).
+///
+/// `entries` is a slice of `(base_addr, size)` pairs for Available RAM regions.
+/// Skips the first 1 MiB (reserved for BIOS/boot) and the kernel's own memory region.
+pub fn init_from_mmap(entries: &[(u64, u64)]) {
+    let kernel_start = 0x100000; // 1 MiB — kernel load address
+    let kernel_end = kernel_end_address();
+
+    for &(base, size) in entries {
+        let mut base = base as usize;
+        let end = (base + size as usize) & !0xfff;
+
+        // Align base up to 4 KiB boundary
+        if base % 4096 != 0 {
+            base = (base & !0xfff) + 0x1000;
+        }
+
+        let mut addr = base;
+        while addr < end {
+            // Skip the first 1 MiB (BIOS/boot area)
+            if addr < 0x100000 {
+                addr = 0x100000;
+                continue;
+            }
+
+            // Skip the kernel's memory region
+            if addr >= kernel_start && addr < kernel_end {
+                let aligned_end = (kernel_end + 0xfff) & !0xfff;
+                addr = aligned_end;
+                continue;
+            }
+
+            // SAFETY: We're adding known-available frames from the
+            // bootloader's memory map.
+            unsafe {
+                FRAME_ALLOCATOR.lock().free(addr);
+            }
+            addr += 4096;
+        }
+    }
+
+    let total = FRAME_ALLOCATOR.lock().top;
+    serial_println!("Frame allocator: {} free frames ({} KiB)", total, total * 4);
+}
+
 /// Initialize the frame allocator from the Multiboot2 memory map.
 ///
 /// Scans all available memory regions and adds usable frames to the
@@ -117,4 +162,9 @@ fn kernel_end_address() -> usize {
     }
     // SAFETY: _kernel_end is a linker symbol, safe to read its address.
     unsafe { &_kernel_end as *const u8 as usize }
+}
+
+/// Return the number of free frames currently in the allocator.
+pub fn frame_count() -> usize {
+    FRAME_ALLOCATOR.lock().top
 }

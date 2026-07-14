@@ -45,6 +45,23 @@ impl SerialPort {
             core::arch::asm!("out dx, al", in("dx") port, in("al") byte);
         }
     }
+
+    /// Read a byte from the serial port, or `None` if no data is available.
+    pub fn read_byte(&mut self) -> Option<u8> {
+        let port = self.port;
+        unsafe {
+            let mut status: u8;
+            core::arch::asm!("in al, dx", out("al") status, in("dx") port + 5);
+            if status & 0x01 != 0 {
+                // Data available
+                let mut byte: u8;
+                core::arch::asm!("in al, dx", out("al") byte, in("dx") port);
+                Some(byte)
+            } else {
+                None
+            }
+        }
+    }
 }
 
 impl fmt::Write for SerialPort {
