@@ -110,13 +110,13 @@ pub extern "C" fn _start_rust(boot_info_addr: usize) -> ! {
     }
 
     // Spawn a test task that prints periodically
-    // {
-    //     static mut TASK1_STACK: core::mem::MaybeUninit<[u8; 16384]> =
-    //         core::mem::MaybeUninit::uninit();
-    //     let ptr = unsafe { core::ptr::addr_of_mut!(TASK1_STACK) as *mut u8 };
-    //     let stack = unsafe { core::slice::from_raw_parts_mut(ptr, 16384) };
-    //     scheduler::SCHEDULER.lock().spawn(test_task_1, stack);
-    // }
+    {
+        static mut TASK1_STACK: core::mem::MaybeUninit<[u8; 16384]> =
+            core::mem::MaybeUninit::uninit();
+        let ptr = unsafe { core::ptr::addr_of_mut!(TASK1_STACK) as *mut u8 };
+        let stack = unsafe { core::slice::from_raw_parts_mut(ptr, 16384) };
+        scheduler::SCHEDULER.lock().spawn(test_task_1, stack);
+    }
 
     serial_println!("Scheduler ready. Type on the serial console:");
 

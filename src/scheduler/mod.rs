@@ -127,11 +127,10 @@ pub fn reschedule() {
         fn swtch(old_rsp: &mut usize, new_rsp: usize);
     }
 
-    // Step 1: Get a pointer to the current task's rsp field.
-    // We need this BEFORE calling schedule() because schedule() will
-    // update self.current to point to the next task.
-    let old_rsp_ptr = {
-        let sched = SCHEDULER.lock();
+    // Do everything under a single lock to avoid deadlock.
+    let (old_rsp_ptr, new_rsp) = {
+        let mut sched = SCHEDULER.lock();
+
         // Find the currently running task
         let mut running_idx = sched.current;
         for i in 0..MAX_TASKS {
@@ -142,25 +141,54 @@ pub fn reschedule() {
                 }
             }
         }
-        if let Some(ref task) = sched.tasks[running_idx] {
-            &task.rsp as *const usize as *mut usize
+
+        // Mark current task as Ready
+        if let Some(ref mut task) = sched.tasks[running_idx] {
+            task.state = TaskState::Ready;
+        }
+
+        // Find the next ready task (round-robin, starting after current)
+        let start = running_idx;
+        let mut next = start;
+        loop {
+            next = (next + 1) % MAX_TASKS;
+            if next == start {
+                break;
+            }
+            if let Some(ref task) = sched.tasks[next] {
+                if task.state == TaskState::Ready {
+                    break;
+                }
+            }
+        }
+
+        sched.current = next;
+
+        let new_rsp = if let Some(ref mut task) = sched.tasks[next] {
+            task.state = TaskState::Running;
+            task.rsp
         } else {
+            0
+        };
+
+        if new_rsp == 0 {
             return;
         }
+
+        // Get a raw pointer to the old task's rsp field (still valid after
+        // the lock is dropped because the task table is static).
+        let old_task = &mut sched.tasks[running_idx];
+        let old_rsp_ptr = old_task.as_mut().map(|t| &mut t.rsp as *mut usize).unwrap_or(core::ptr::null_mut());
+
+        if old_rsp_ptr.is_null() {
+            return;
+        }
+
+        (old_rsp_ptr, new_rsp)
     };
 
-    // Step 2: Find the next task to run.
-    // schedule() marks current Running→Ready, next Ready→Running,
-    // updates self.current, and returns the next task's saved RSP.
-    let new_rsp = SCHEDULER.lock().schedule();
-
-    if new_rsp == 0 {
-        return;
-    }
-
-    // Step 3: swtch saves current registers + RSP into *old_rsp_ptr,
-    // then loads new_rsp and pops the new task's registers.
-    // When this task is later resumed, swtch returns here.
+    // swtch is called with the lock dropped — it does not touch the
+    // scheduler state, only saves/restores registers.
     unsafe {
         swtch(&mut *old_rsp_ptr, new_rsp);
     }
