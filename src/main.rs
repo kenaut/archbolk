@@ -203,9 +203,8 @@ fn idle_task() -> ! {
                 }
             }
         }
-        // Check if scheduler wants to switch tasks
-        scheduler::reschedule();
-        // Yield to other tasks
+        // Preemptive scheduling is driven by the timer IRQ; no explicit
+        // yield is needed. Pause briefly to reduce busy-loop overhead.
         unsafe {
             core::arch::asm!("pause");
         }
@@ -220,7 +219,9 @@ fn test_task_1() -> ! {
         if count % 50000 == 0 {
             serial_println!("[task1] count={}", count);
         }
-        // Yield to let other tasks run
-        scheduler::reschedule();
+        // The timer IRQ preempts us; no explicit yield needed.
+        unsafe {
+            core::arch::asm!("pause");
+        }
     }
 }

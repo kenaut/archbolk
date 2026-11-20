@@ -37,6 +37,17 @@ isr_stub_\vec:
 
     call isr_common_handler
 
+    /* Preemptive scheduling: if the timer requested a reschedule,
+     * switch to the next task's interrupt frame. The generic pop/iretq
+     * below will then restore the *new* task's context.
+     * rdi = old_rsp (current frame), rax = new_rsp (0 = no switch). */
+    mov rdi, rsp
+    call switch_from_interrupt
+    test rax, rax
+    jz 1f
+    mov rsp, rax
+1:
+
     pop r15
     pop r14
     pop r13

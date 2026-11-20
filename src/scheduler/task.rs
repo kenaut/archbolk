@@ -9,11 +9,15 @@ pub enum TaskState {
     Blocked,
 }
 
+/// Number of u64 slots in a saved interrupt frame:
+/// 15 registers (r15..rax) + vector + error_code + iretq (rip/cs/rflags/rsp/ss).
+pub const FRAME_SLOTS: usize = 22;
+
 /// Task Control Block.
 pub struct Task {
     /// Task ID.
     pub id: usize,
-    /// Saved stack pointer (RSP) when not running.
+    /// Saved RSP pointing at this task's interrupt frame on its stack.
     pub rsp: usize,
     /// Task state.
     pub state: TaskState,
@@ -24,52 +28,40 @@ pub struct Task {
 impl Task {
     /// Create a new task with the given entry point and stack.
     ///
-    /// Sets up the stack so that the first `swtch` into this task will
-    /// jump to `entry`. The stack layout matches what `swtch` expects:
+    /// We build an initial interrupt frame on the stack so that the generic
+    /// `iretq`-based context-switch path can start the task: popping the
+    /// registers and executing `iretq` jumps to `entry` with a fresh stack.
     ///
-    /// swtch push order: r15, r14, r13, r12, rbp, rbx
-    /// swtch pop  order: rbx, rbp, r12, r13, r14, r15
-    ///
-    /// Stack layout after swtch saves (low to high address):
-    ///   [rbx]            <- RSP after all pushes (popped 1st)
-    ///   [rbp]            <- popped 2nd
-    ///   [r12]            <- popped 3rd
-    ///   [r13]            <- popped 4th
-    ///   [r14]            <- popped 5th
-    ///   [r15]            <- popped 6th
-    ///   [return_address] <- ret reads this (highest address)
-    ///
-    /// So the initial stack for a new task should look like:
-    ///   [rbx = 0]        <- RSP
-    ///   [rbp = 0]
-    ///   [r12 = 0]
-    ///   [r13 = 0]
-    ///   [r14 = 0]
-    ///   [r15 = 0]
-    ///   [entry]          <- return address (swtch will ret to this)
+    /// Frame layout (low to high address, matches `InterruptFrame`):
+    ///   [r15..rax]      <- RSP (15 slots, all zero)
+    ///   [vector=0]      (dummy, skipped by `add rsp, 16`)
+    ///   [error_code=0]  (dummy, skipped by `add rsp, 16`)
+    ///   [rip=entry]
+    ///   [cs=0x08]        kernel code segment
+    ///   [rflags=0x202]   interrupts enabled
+    ///   [rsp=stack_top]  fresh stack for the task
+    ///   [ss=0x10]        kernel data segment
     pub fn new(id: usize, entry: fn() -> !, stack: &'static mut [u8]) -> Self {
         let stack_top = stack.as_ptr() as usize + stack.len();
-
-        // Allocate 7 entries (56 bytes) at the top of the stack
-        let frame_start = stack_top - 56;
+        let frame_start = stack_top - FRAME_SLOTS * 8;
         let base = frame_start as *mut u64;
 
         unsafe {
-            base.add(0).write(0);              // rbx
-            base.add(1).write(0);              // rbp
-            base.add(2).write(0);              // r12
-            base.add(3).write(0);              // r13
-            base.add(4).write(0);              // r14
-            base.add(5).write(0);              // r15
-            base.add(6).write(entry as u64);   // return address
+            for i in 0..15 {
+                base.add(i).write(0); // r15..rax
+            }
+            base.add(15).write(0); // vector (dummy)
+            base.add(16).write(0); // error_code (dummy)
+            base.add(17).write(entry as u64); // rip
+            base.add(18).write(0x08); // cs
+            base.add(19).write(0x202); // rflags (IF set)
+            base.add(20).write(stack_top as u64); // rsp
+            base.add(21).write(0x10); // ss
         }
-
-        // RSP points to rbx (lowest address) — swtch pops rbx first
-        let rsp = frame_start;
 
         Task {
             id,
-            rsp,
+            rsp: frame_start,
             state: TaskState::Ready,
             stack,
         }

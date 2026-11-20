@@ -40,19 +40,28 @@ impl Scheduler {
         self.current
     }
 
-    /// Switch to the next ready task.
+    /// Initialize the scheduler with an idle task.
+    pub fn init(&mut self, idle_entry: fn() -> !, idle_stack: &'static mut [u8]) {
+        self.spawn(idle_entry, idle_stack);
+        self.current = 0;
+        if let Some(ref mut task) = self.tasks[0] {
+            task.state = TaskState::Running;
+        }
+        serial_println!("Scheduler: initialized with {} task(s)", self.count);
+    }
+
+    /// Pick the next runnable task and return its saved RSP.
     ///
-    /// Finds the currently running task, marks it `Ready`,
-    /// then searches for the next `Ready` task and marks it `Running`.
-    /// Returns the next task's RSP.
-    ///
-    /// NOTE: The current task's RSP is NOT saved here — `swtch` does that.
-    pub fn schedule(&mut self) -> usize {
+    /// Saves `old_rsp` (the current task's interrupt-frame pointer on its
+    /// stack) into the current task, marks it Ready, then selects the next
+    /// Ready task round-robin and marks it Running. Returns the new task's
+    /// RSP so the assembly stub can `iretq` into it.
+    fn pick_next(&mut self, old_rsp: usize) -> usize {
         if self.count == 0 {
-            return 0;
+            return old_rsp;
         }
 
-        // Find the currently running task and mark it Ready.
+        // Find the currently running task.
         let mut running_idx = self.current;
         for i in 0..MAX_TASKS {
             if let Some(ref task) = self.tasks[i] {
@@ -63,11 +72,15 @@ impl Scheduler {
             }
         }
 
+        // Save current context and mark Ready.
         if let Some(ref mut task) = self.tasks[running_idx] {
-            task.state = TaskState::Ready;
+            task.rsp = old_rsp;
+            if task.state == TaskState::Running {
+                task.state = TaskState::Ready;
+            }
         }
 
-        // Search for the next ready task, starting after the current one.
+        // Find the next Ready task (round-robin, starting after current).
         let start = running_idx;
         let mut next = start;
         loop {
@@ -83,24 +96,21 @@ impl Scheduler {
         }
 
         self.current = next;
-
-        if let Some(ref mut task) = self.tasks[self.current] {
+        if let Some(ref mut task) = self.tasks[next] {
             task.state = TaskState::Running;
             return task.rsp;
         }
 
-        // Fallback: no ready task found.
-        0
+        old_rsp
     }
 
-    /// Initialize the scheduler with an idle task.
-    pub fn init(&mut self, idle_entry: fn() -> !, idle_stack: &'static mut [u8]) {
-        self.spawn(idle_entry, idle_stack);
-        self.current = 0;
-        if let Some(ref mut task) = self.tasks[0] {
-            task.state = TaskState::Running;
-        }
-        serial_println!("Scheduler: initialized with {} task(s)", self.count);
+    /// Return the RSP of the currently running task (its initial frame).
+    pub fn current_rsp(&self) -> usize {
+        self.tasks
+            .get(self.current)
+            .and_then(|t| t.as_ref())
+            .map(|t| t.rsp)
+            .unwrap_or(0)
     }
 }
 
@@ -111,85 +121,19 @@ pub static SCHEDULER: spin::Mutex<Scheduler> = spin::Mutex::new(Scheduler::new()
 static NEED_RESCHEDULE: AtomicBool = AtomicBool::new(false);
 
 /// Called from the timer IRQ handler (interrupt context).
-/// Just sets a flag — the actual switch happens in the idle loop.
 pub fn timer_tick() {
     NEED_RESCHEDULE.store(true, Ordering::Release);
 }
 
-/// Called from the idle loop. If a reschedule was requested, perform it.
-pub fn reschedule() {
-    if !NEED_RESCHEDULE.load(Ordering::Acquire) {
-        return;
+/// Called from the interrupt stub on every interrupt return.
+///
+/// If a reschedule was requested, switches to the next task's interrupt
+/// frame. Returns the new RSP, or 0 if no switch is needed (the stub then
+/// keeps the current RSP).
+#[unsafe(no_mangle)]
+pub extern "C" fn switch_from_interrupt(old_rsp: usize) -> usize {
+    if !NEED_RESCHEDULE.swap(false, Ordering::AcqRel) {
+        return 0;
     }
-    NEED_RESCHEDULE.store(false, Ordering::Release);
-
-    unsafe extern "C" {
-        fn swtch(old_rsp: &mut usize, new_rsp: usize);
-    }
-
-    // Do everything under a single lock to avoid deadlock.
-    let (old_rsp_ptr, new_rsp) = {
-        let mut sched = SCHEDULER.lock();
-
-        // Find the currently running task
-        let mut running_idx = sched.current;
-        for i in 0..MAX_TASKS {
-            if let Some(ref task) = sched.tasks[i] {
-                if task.state == TaskState::Running {
-                    running_idx = i;
-                    break;
-                }
-            }
-        }
-
-        // Mark current task as Ready
-        if let Some(ref mut task) = sched.tasks[running_idx] {
-            task.state = TaskState::Ready;
-        }
-
-        // Find the next ready task (round-robin, starting after current)
-        let start = running_idx;
-        let mut next = start;
-        loop {
-            next = (next + 1) % MAX_TASKS;
-            if next == start {
-                break;
-            }
-            if let Some(ref task) = sched.tasks[next] {
-                if task.state == TaskState::Ready {
-                    break;
-                }
-            }
-        }
-
-        sched.current = next;
-
-        let new_rsp = if let Some(ref mut task) = sched.tasks[next] {
-            task.state = TaskState::Running;
-            task.rsp
-        } else {
-            0
-        };
-
-        if new_rsp == 0 {
-            return;
-        }
-
-        // Get a raw pointer to the old task's rsp field (still valid after
-        // the lock is dropped because the task table is static).
-        let old_task = &mut sched.tasks[running_idx];
-        let old_rsp_ptr = old_task.as_mut().map(|t| &mut t.rsp as *mut usize).unwrap_or(core::ptr::null_mut());
-
-        if old_rsp_ptr.is_null() {
-            return;
-        }
-
-        (old_rsp_ptr, new_rsp)
-    };
-
-    // swtch is called with the lock dropped — it does not touch the
-    // scheduler state, only saves/restores registers.
-    unsafe {
-        swtch(&mut *old_rsp_ptr, new_rsp);
-    }
+    SCHEDULER.lock().pick_next(old_rsp)
 }

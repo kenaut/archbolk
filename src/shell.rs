@@ -18,8 +18,15 @@ pub struct Shell {
     history: [[u8; LINE_BUF_SIZE]; HIST_SIZE],
     /// Next history slot to write.
     hist_next: usize,
-    /// Current position browsing history (for up/down).
-    hist_pos: usize,
+    /// Number of stored history entries (capped at HIST_SIZE).
+    hist_count: usize,
+    /// Logical index being browsed (0..=hist_count; hist_count = draft/empty).
+    hist_browse: usize,
+    /// Saved draft while browsing history.
+    draft: [u8; LINE_BUF_SIZE],
+    draft_len: usize,
+    /// ANSI escape sequence state: 0 = normal, 1 = ESC, 2 = ESC '['.
+    esc_state: u8,
 }
 
 impl Shell {
@@ -29,7 +36,59 @@ impl Shell {
             len: 0,
             history: [[0; LINE_BUF_SIZE]; HIST_SIZE],
             hist_next: 0,
-            hist_pos: 0,
+            hist_count: 0,
+            hist_browse: 0,
+            draft: [0; LINE_BUF_SIZE],
+            draft_len: 0,
+            esc_state: 0,
+        }
+    }
+
+    /// Replace the current line contents and redraw it on the serial console.
+    fn replace_line(&mut self, s: &[u8]) {
+        for _ in 0..self.len {
+            serial_print!("\x08 \x08");
+        }
+        self.len = s.len().min(LINE_BUF_SIZE - 1);
+        self.line[..self.len].copy_from_slice(&s[..self.len]);
+        for &b in &self.line[..self.len] {
+            serial_print!("{}", b as char);
+        }
+    }
+
+    /// Browse to the previous (older) command in history.
+    fn history_up(&mut self) {
+        if self.hist_count == 0 {
+            return;
+        }
+        if self.hist_browse == self.hist_count {
+            self.draft[..self.len].copy_from_slice(&self.line[..self.len]);
+            self.draft_len = self.len;
+        }
+        if self.hist_browse > 0 {
+            self.hist_browse -= 1;
+            let idx = (self.hist_next + HIST_SIZE - self.hist_count + self.hist_browse) % HIST_SIZE;
+            let cmd = self.history[idx];
+            let cmd_len = cmd.iter().position(|&b| b == 0).unwrap_or(LINE_BUF_SIZE);
+            self.replace_line(&cmd[..cmd_len]);
+        }
+    }
+
+    /// Browse to the next (newer) command in history, or restore the draft.
+    fn history_down(&mut self) {
+        if self.hist_browse >= self.hist_count {
+            return;
+        }
+        self.hist_browse += 1;
+        if self.hist_browse == self.hist_count {
+            let len = self.draft_len;
+            let draft = self.draft;
+            self.replace_line(&draft[..len]);
+        } else {
+            let idx = (self.hist_next + HIST_SIZE - self.hist_count + self.hist_browse) % HIST_SIZE;
+            let cmd = self.history[idx];
+            let cmd_len = cmd.iter().position(|&b| b == 0).unwrap_or(LINE_BUF_SIZE);
+            self.replace_line(&cmd[..cmd_len]);
         }
     }
 
@@ -40,6 +99,34 @@ impl Shell {
 
     /// Handle a single keypress from the keyboard.
     pub fn handle_key(&mut self, ch: u8) {
+        // ANSI escape sequences (arrow keys) arrive as ESC '[' A/B.
+        // Handle them before lowercasing so 'A'/'B' survive.
+        if self.esc_state != 0 {
+            match (self.esc_state, ch) {
+                (1, b'[') => {
+                    self.esc_state = 2;
+                    return;
+                }
+                (2, b'A') => {
+                    self.esc_state = 0;
+                    self.history_up();
+                    return;
+                }
+                (2, b'B') => {
+                    self.esc_state = 0;
+                    self.history_down();
+                    return;
+                }
+                _ => {
+                    self.esc_state = 0;
+                }
+            }
+        }
+        if ch == 0x1B {
+            self.esc_state = 1;
+            return;
+        }
+
         // Normalize to lowercase for command matching
         let ch = if ch >= b'A' && ch <= b'Z' { ch + 32 } else { ch };
         match ch {
@@ -59,14 +146,24 @@ impl Shell {
                 self.execute(cmd);
                 // Save to history (don't save empty or duplicate of last)
                 if self.len > 0 {
-                    let last = self.history[(self.hist_next + HIST_SIZE - 1) % HIST_SIZE];
-                    if &last[..self.len] != &self.line[..self.len] {
-                        self.history[self.hist_next][..self.len].copy_from_slice(&self.line[..self.len]);
+                    let mut duplicate = false;
+                    if self.hist_count > 0 {
+                        let last_idx = (self.hist_next + HIST_SIZE - 1) % HIST_SIZE;
+                        duplicate = self.history[last_idx][..self.len] == self.line[..self.len];
+                    }
+                    if !duplicate {
+                        for i in 0..LINE_BUF_SIZE {
+                            self.history[self.hist_next][i] = 0;
+                        }
+                        self.history[self.hist_next][..self.len]
+                            .copy_from_slice(&self.line[..self.len]);
                         self.hist_next = (self.hist_next + 1) % HIST_SIZE;
+                        self.hist_count = (self.hist_count + 1).min(HIST_SIZE);
                     }
                 }
                 self.len = 0;
-                self.hist_pos = self.hist_next;
+                self.hist_browse = self.hist_count;
+                self.draft_len = 0;
                 self.print_prompt();
             }
             b'\x08' | 0x7F => {
