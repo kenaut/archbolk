@@ -59,8 +59,10 @@ pub fn init() {
     let efer = rdmsr(MSR_EFER);
     wrmsr(MSR_EFER, efer | EFER_SCE);
 
-    // STAR: SYSCALL CS = 0x08, SYSRET CS = 0x18 (user code at 0x18+8=0x20)
-    let star = (0x18u64 << 48) | (0x08u64 << 32);
+    // STAR: SYSCALL CS = 0x08 (kernel code).
+    // SYSRET (64-bit): CS = STAR[63:48]+16 = 0x20 (user code),
+    //                  SS = STAR[63:48]+8  = 0x18 (user data).
+    let star = (0x10u64 << 48) | (0x08u64 << 32);
     wrmsr(MSR_STAR, star);
 
     // LSTAR: syscall entry point RIP
@@ -141,13 +143,17 @@ pub extern "C" fn syscall_handler(frame: &mut SyscallFrame) {
         }
 
         SYS_EXIT => {
-            // sys_exit(status: i32)
+            // sys_exit(status: i32): mark the current task terminated.
+            // The timer IRQ will then schedule it away (pick_next skips
+            // terminated tasks), so we just wait with interrupts enabled.
             let status = frame.rdi as i32;
-            crate::serial_println!("syscall: exit({}) called", status);
-            // For now, just halt
+            let id = crate::scheduler::SCHEDULER.lock().current_id();
+            crate::scheduler::SCHEDULER.lock().kill(id);
+            crate::serial_println!("syscall: task {} exit({})", id, status);
+            // Re-enable interrupts so the timer IRQ can schedule us away.
             loop {
                 unsafe {
-                    asm!("cli; hlt");
+                    asm!("sti; hlt");
                 }
             }
         }

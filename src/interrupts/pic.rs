@@ -56,6 +56,7 @@ pub fn eoi(irq: u8) {
 }
 
 /// Mask (disable) a specific IRQ.
+#[allow(dead_code)]
 pub fn mask(irq: u8) {
     let port = if irq < 8 { PIC1_DATA } else { PIC2_DATA };
     let irq_bit = 1 << (irq & 0x07);

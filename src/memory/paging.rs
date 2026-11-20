@@ -5,6 +5,7 @@ use crate::serial_println;
 #[derive(Clone, Copy)]
 pub struct EntryFlags(u64);
 
+#[allow(dead_code)]
 impl EntryFlags {
     pub const PRESENT: u64 = 1 << 0;
     pub const WRITABLE: u64 = 1 << 1;
@@ -141,6 +142,10 @@ pub unsafe fn map_page(virtual_addr: usize, physical_addr: usize, flags: EntryFl
     let p2_index = (virtual_addr >> 21) & 0x1ff;
     let p1_index = (virtual_addr >> 12) & 0x1ff;
 
+    // All paging-structure levels must allow user access for the leaf to be
+    // usable by ring 3. Propagate USER to intermediate entries we create.
+    let user_bit = flags.value() & EntryFlags::USER;
+
     let cr3: u64;
     // SAFETY: Reading CR3 is always safe.
     unsafe {
@@ -158,6 +163,7 @@ pub unsafe fn map_page(virtual_addr: usize, physical_addr: usize, flags: EntryFl
         let mut flags = EntryFlags::new();
         flags.set(EntryFlags::PRESENT);
         flags.set(EntryFlags::WRITABLE);
+        flags.set(user_bit);
         pml4.entries[p4_index].set_addr(frame);
         pml4.entries[p4_index].set_flags(flags);
         table
@@ -175,6 +181,7 @@ pub unsafe fn map_page(virtual_addr: usize, physical_addr: usize, flags: EntryFl
         let mut f = EntryFlags::new();
         f.set(EntryFlags::PRESENT);
         f.set(EntryFlags::WRITABLE);
+        f.set(user_bit);
         pdp.entries[p3_index].set_addr(frame);
         pdp.entries[p3_index].set_flags(f);
         table
@@ -192,6 +199,7 @@ pub unsafe fn map_page(virtual_addr: usize, physical_addr: usize, flags: EntryFl
         let mut f = EntryFlags::new();
         f.set(EntryFlags::PRESENT);
         f.set(EntryFlags::WRITABLE);
+        f.set(user_bit);
         pd.entries[p2_index].set_addr(frame);
         pd.entries[p2_index].set_flags(f);
         table

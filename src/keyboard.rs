@@ -19,9 +19,11 @@ const CMD_PORT1_TEST: u8 = 0xAB;
 
 // ── Keyboard commands ───────────────────────────────────────────────────
 const KBD_CMD_SET_LEDS: u8 = 0xED;
+#[allow(dead_code)]
 const KBD_CMD_ECHO: u8 = 0xEE;
 const KBD_CMD_SET_SCANSET: u8 = 0xF0;
 const KBD_CMD_ENABLE: u8 = 0xF4;
+#[allow(dead_code)]
 const KBD_CMD_DISABLE: u8 = 0xF5;
 const KBD_CMD_RESET: u8 = 0xFF;
 
@@ -329,6 +331,7 @@ pub fn read_key() -> Option<u8> {
 }
 
 /// Check whether the keyboard is initialized.
+#[allow(dead_code)]
 pub fn is_initialized() -> bool {
     KEYBOARD_INITIALIZED.load(Ordering::Acquire)
 }

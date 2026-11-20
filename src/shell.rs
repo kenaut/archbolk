@@ -1,5 +1,3 @@
-use core::fmt::Write;
-
 use crate::serial_print;
 use crate::serial_println;
 

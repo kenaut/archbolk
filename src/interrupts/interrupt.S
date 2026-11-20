@@ -422,8 +422,41 @@ syscall_entry:
     pop     r14
     pop     r15
 
-    /* Return via ret (works from ring 0).
-     * When user mode is added, check CS and use sysretq for ring-3 callers.
-     * Push return address (rcx) back onto stack for ret. */
+    /* Decide return path by bit 37 of the saved return RIP in rcx.
+     * User code lives at 0x200_0000_0000 (bit 37 set); kernel addresses
+     * are far below. `bt` does not clobber rcx or the return value rax. */
+    bt      rcx, 37
+    jc      1f
+
+    /* Ring 0: return with ret. */
     push    rcx
     ret
+
+1:
+    /* Ring 3: sysretq. rcx = return RIP, r11 = return RFLAGS (restored above).
+     * STAR MSR supplies user CS (0x20|3=0x23) and SS (0x18|3=0x1b).
+     * RSP is unchanged. */
+    sysretq
+
+/* ── Ring-3 demo program ────────────────────────────────────────────────
+ * Runs in user mode via iretq. Writes a message with sys_write, then exits.
+ * All code/data must be within one 4 KiB page so map_user_page can expose it.
+ */
+.globl user_demo
+user_demo:
+    mov rax, 1                 /* SYS_WRITE */
+    mov rdi, 1                 /* fd = stdout */
+    lea rsi, [rip + user_msg]
+    mov rdx, 19                 /* user_msg_len as immediate */
+    syscall
+
+    mov rax, 60                /* SYS_EXIT */
+    xor rdi, rdi
+    syscall
+
+.user_loop:
+    jmp .user_loop
+
+user_msg:
+    .ascii "Hello from ring 3!\n"
+.set user_msg_len, 19

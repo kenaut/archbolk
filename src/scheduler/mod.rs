@@ -54,6 +54,20 @@ impl Scheduler {
         id
     }
 
+    /// Add a new ring-3 user task. Returns its task ID.
+    pub fn spawn_user(
+        &mut self,
+        name: &'static str,
+        entry: usize,
+        user_stack_top: usize,
+        kernel_stack: &'static mut [u8],
+    ) -> usize {
+        let id = self.count;
+        self.tasks[id] = Some(Task::new_user(id, name, entry, user_stack_top, kernel_stack));
+        self.count += 1;
+        id
+    }
+
     /// Return the ID of the current task.
     pub fn current_id(&self) -> usize {
         self.current
@@ -117,6 +131,11 @@ impl Scheduler {
         self.current = next;
         if let Some(ref mut task) = self.tasks[next] {
             task.state = TaskState::Running;
+            // Ring-3 tasks need TSS.rsp0 pointing at their kernel stack so
+            // that interrupts/syscalls from user mode find a valid ring-0 stack.
+            if task.user_mode {
+                crate::gdt::set_rsp0(task.kernel_stack_top);
+            }
             return task.rsp;
         }
 
@@ -124,6 +143,7 @@ impl Scheduler {
     }
 
     /// Return the RSP of the currently running task (its initial frame).
+    #[allow(dead_code)]
     pub fn current_rsp(&self) -> usize {
         self.tasks
             .get(self.current)
@@ -171,6 +191,7 @@ impl Scheduler {
     }
 
     /// Number of preallocated stacks still available.
+    #[allow(dead_code)]
     pub fn free_stacks(&self) -> usize {
         MAX_SPAWN.saturating_sub(NEXT_STACK.load(Ordering::Relaxed))
     }

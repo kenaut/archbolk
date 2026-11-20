@@ -7,6 +7,7 @@ pub struct SerialPort {
 
 impl SerialPort {
     /// Create a new serial port at the given I/O port.
+    #[allow(dead_code)]
     pub const fn new(port: u16) -> SerialPort {
         SerialPort { port }
     }

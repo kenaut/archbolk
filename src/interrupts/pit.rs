@@ -30,6 +30,7 @@ pub fn init(target_hz: u64) -> u64 {
 /// Read the current PIT counter value (0-65535).
 ///
 /// Returns the number of ticks remaining before the next IRQ.
+#[allow(dead_code)]
 pub fn read_count() -> u16 {
     unsafe {
         // Latch command: channel 0

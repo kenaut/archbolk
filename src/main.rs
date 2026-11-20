@@ -11,6 +11,7 @@ mod keyboard;
 mod shell;
 mod scheduler;
 mod syscall;
+mod gdt;
 
 use core::panic::PanicInfo;
 
@@ -86,6 +87,9 @@ pub extern "C" fn _start_rust(boot_info_addr: usize) -> ! {
     // Initialize memory subsystem
     memory::init(boot_info_addr, is_pvh);
 
+    // Replace boot GDT with full table (user segments + TSS)
+    gdt::init();
+
     // Initialize interrupt subsystem (IDT, PIC, PIT)
     interrupts::init();
     serial_println!("Interrupt subsystem initialized");
@@ -104,7 +108,7 @@ pub extern "C" fn _start_rust(boot_info_addr: usize) -> ! {
     {
         static mut IDLE_STACK: core::mem::MaybeUninit<[u8; 16384]> =
             core::mem::MaybeUninit::uninit();
-        let ptr = unsafe { core::ptr::addr_of_mut!(IDLE_STACK) as *mut u8 };
+        let ptr = core::ptr::addr_of_mut!(IDLE_STACK) as *mut u8;
         let stack = unsafe { core::slice::from_raw_parts_mut(ptr, 16384) };
         scheduler::SCHEDULER.lock().init(idle_task, stack);
     }
@@ -113,10 +117,13 @@ pub extern "C" fn _start_rust(boot_info_addr: usize) -> ! {
     {
         static mut TASK1_STACK: core::mem::MaybeUninit<[u8; 16384]> =
             core::mem::MaybeUninit::uninit();
-        let ptr = unsafe { core::ptr::addr_of_mut!(TASK1_STACK) as *mut u8 };
+        let ptr = core::ptr::addr_of_mut!(TASK1_STACK) as *mut u8;
         let stack = unsafe { core::slice::from_raw_parts_mut(ptr, 16384) };
         scheduler::SCHEDULER.lock().spawn("test1", test_task_1, stack);
     }
+
+    // Create a ring-3 user demo task.
+    spawn_user_demo();
 
     serial_println!("Scheduler ready. Type on the serial console:");
 
@@ -152,7 +159,6 @@ pub extern "C" fn _start_rust(boot_info_addr: usize) -> ! {
 fn idle_task() -> ! {
     let mut shell = shell::Shell::new();
     shell::Shell::print_prompt(&shell);
-    let mut debug_count: u64 = 0;
 
     loop {
         // Check for keyboard input and feed the shell
@@ -169,38 +175,8 @@ fn idle_task() -> ! {
                 b
             };
             match byte {
-                Some(b) => {
-                    debug_count += 1;
-                    shell.handle_key(b);
-                }
+                Some(b) => shell.handle_key(b),
                 None => break,
-            }
-        }
-        // Debug: periodically show we're alive and polling
-        debug_count += 1;
-        if debug_count % 50000 == 0 {
-            // Check LSR register directly
-            let lsr: u8;
-            unsafe { core::arch::asm!("in al, dx", out("al") lsr, in("dx") 0x3FDu16); }
-            if lsr & 0x01 != 0 {
-                // Write directly without serial_println! to avoid lock issues
-                {
-                    use core::fmt::Write;
-                    let s = crate::serial::SERIAL.lock();
-                    let _ = s.write_str("[dbg] LSR says data ready! lsr=0x");
-                    // Can't easily print hex without format_args, skip for now
-                    let _ = s.write_str("\n");
-                    crate::serial::SERIAL.unlock();
-                }
-                let ch: u8;
-                unsafe { core::arch::asm!("in al, dx", out("al") ch, in("dx") 0x3F8u16); }
-                {
-                    use core::fmt::Write;
-                    let s = crate::serial::SERIAL.lock();
-                    let _ = s.write_str("[dbg] read byte: 0x");
-                    let _ = s.write_str("\n");
-                    crate::serial::SERIAL.unlock();
-                }
             }
         }
         // Preemptive scheduling is driven by the timer IRQ; no explicit
@@ -223,6 +199,59 @@ fn test_task_1() -> ! {
         unsafe {
             core::arch::asm!("pause");
         }
+    }
+}
+
+/// Map the ring-3 demo's code page and a user stack, then spawn it.
+fn spawn_user_demo() {
+    use memory::paging::{map_page, EntryFlags};
+
+    // Use PML4[1] (0x200_0000_0000) — a canonical low-half address with a
+    // fresh page-table hierarchy, avoiding the kernel's identity huge pages.
+    const USER_CODE_VADDR: usize = 0x200_0000_0000;
+    const USER_STACK_VADDR: usize = 0x200_0010_0000; // stack grows down from here
+
+    unsafe extern "C" {
+        fn user_demo();
+    }
+
+    let mut user_flags = EntryFlags::new();
+    user_flags.set(EntryFlags::PRESENT);
+    user_flags.set(EntryFlags::WRITABLE);
+    user_flags.set(EntryFlags::USER);
+
+    unsafe {
+        // Map the page containing user_demo into user space at USER_CODE_VADDR.
+        let user_fn: unsafe extern "C" fn() = user_demo;
+        let user_addr = user_fn as usize;
+        let code_phys = user_addr & !0xfff;
+        let code_off = user_addr & 0xfff;
+        map_page(USER_CODE_VADDR, code_phys, user_flags);
+
+        // Allocate and map one user-stack page.
+        let stack_frame = memory::pfa::FRAME_ALLOCATOR
+            .lock()
+            .allocate()
+            .expect("OOM: user stack");
+        map_page(USER_STACK_VADDR, stack_frame, user_flags);
+        let user_stack_top = USER_STACK_VADDR + 0x1000;
+
+        // Kernel stack for ring-0 transitions (interrupt/syscall frames).
+        static mut USER_KERNEL_STACK: core::mem::MaybeUninit<[u8; 16384]> =
+            core::mem::MaybeUninit::uninit();
+        let kptr = core::ptr::addr_of_mut!(USER_KERNEL_STACK) as *mut u8;
+        let kernel_stack = core::slice::from_raw_parts_mut(kptr, 16384);
+
+        let entry = USER_CODE_VADDR + code_off;
+        let id = scheduler::SCHEDULER
+            .lock()
+            .spawn_user("user_demo", entry, user_stack_top, kernel_stack);
+        serial_println!(
+            "User demo spawned: id={} entry=0x{:x} ustack=0x{:x}",
+            id,
+            entry,
+            user_stack_top
+        );
     }
 }
 
