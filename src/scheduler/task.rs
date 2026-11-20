@@ -17,10 +17,14 @@ pub const FRAME_SLOTS: usize = 22;
 pub struct Task {
     /// Task ID.
     pub id: usize,
+    /// Human-readable name.
+    pub name: &'static str,
     /// Saved RSP pointing at this task's interrupt frame on its stack.
     pub rsp: usize,
     /// Task state.
     pub state: TaskState,
+    /// Whether this task has been terminated and should be reaped.
+    pub terminated: bool,
     /// Kernel stack for this task.
     pub stack: &'static mut [u8],
 }
@@ -41,7 +45,7 @@ impl Task {
     ///   [rflags=0x202]   interrupts enabled
     ///   [rsp=stack_top]  fresh stack for the task
     ///   [ss=0x10]        kernel data segment
-    pub fn new(id: usize, entry: fn() -> !, stack: &'static mut [u8]) -> Self {
+    pub fn new(id: usize, name: &'static str, entry: fn() -> !, stack: &'static mut [u8]) -> Self {
         let stack_top = stack.as_ptr() as usize + stack.len();
         let frame_start = stack_top - FRAME_SLOTS * 8;
         let base = frame_start as *mut u64;
@@ -61,8 +65,10 @@ impl Task {
 
         Task {
             id,
+            name,
             rsp: frame_start,
             state: TaskState::Ready,
+            terminated: false,
             stack,
         }
     }

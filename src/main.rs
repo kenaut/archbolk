@@ -115,7 +115,7 @@ pub extern "C" fn _start_rust(boot_info_addr: usize) -> ! {
             core::mem::MaybeUninit::uninit();
         let ptr = unsafe { core::ptr::addr_of_mut!(TASK1_STACK) as *mut u8 };
         let stack = unsafe { core::slice::from_raw_parts_mut(ptr, 16384) };
-        scheduler::SCHEDULER.lock().spawn(test_task_1, stack);
+        scheduler::SCHEDULER.lock().spawn("test1", test_task_1, stack);
     }
 
     serial_println!("Scheduler ready. Type on the serial console:");
@@ -220,6 +220,22 @@ fn test_task_1() -> ! {
             serial_println!("[task1] count={}", count);
         }
         // The timer IRQ preempts us; no explicit yield needed.
+        unsafe {
+            core::arch::asm!("pause");
+        }
+    }
+}
+
+/// Dynamically spawned worker: prints a periodic heartbeat until terminated.
+pub fn spawned_task() -> ! {
+    static NEXT_ID: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+    let id = NEXT_ID.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+    let mut count: u64 = 0;
+    loop {
+        count += 1;
+        if count % 2_000_000 == 0 {
+            serial_println!("[worker#{}] tick {}", id, count);
+        }
         unsafe {
             core::arch::asm!("pause");
         }

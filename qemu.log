@@ -13,7 +13,7 @@ Memory map entries: 7
   [  6] base=0x000000fd00000000 len=0x0000000300000000 type=Reserved
 Lower memory: 639 KiB
 Upper memory: 129920 KiB
-Frame allocator: 32283 free frames (129132 KiB)
+Frame allocator: 32217 free frames (128868 KiB)
 Page tables: CR3 = 0x0000000000001000
   Extending identity map to 0x0000000008000000
   PML4[0] -> 0x0000000000002000
@@ -26,7 +26,7 @@ Heap test: Vec<u64> len = 100
 Heap allocation tests passed.
 Memory subsystem initialized.
 Interrupt subsystem initialized
-Syscall: entry at 0x11796a
+Syscall: entry at 0x1197aa
 Keyboard: initialized
 Scheduler: initialized with 1 task(s)
 Scheduler ready. Type on the serial console:
@@ -252,154 +252,4 @@ $ [task1] count=100000
 [task1] count=10850000
 [task1] count=10900000
 [task1] count=10950000
-[task1] count=11000000
-[task1] count=11050000
-[task1] count=11100000
-[task1] count=11150000
-[task1] count=11200000
-[task1] count=11250000
-[task1] count=11300000
-[task1] count=11350000
-[task1] count=11400000
-[task1] count=11450000
-[task1] count=11500000
-[task1] count=11550000
-[task1] count=11600000
-[task1] count=11650000
-[task1] count=11700000
-[task1] count=11750000
-[task1] count=11800000
-[task1] count=11850000
-[task1] count=11900000
-[task1] count=11950000
-[task1] count=12000000
-[task1] count=12050000
-[task1] count=12100000
-[task1] count=12150000
-[task1] count=12200000
-[task1] count=12250000
-[task1] count=12300000
-[task1] count=12350000
-[task1] count=12400000
-[task1] count=12450000
-[task1] count=12500000
-[task1] count=12550000
-[task1] count=12600000
-[task1] count=12650000
-[task1] count=12700000
-[task1] count=12750000
-[task1] count=12800000
-[task1] count=12850000
-[task1] count=12900000
-[task1] count=12950000
-[task1] count=13000000
-[task1] count=13050000
-[task1] count=13100000
-[task1] count=13150000
-[task1] count=13200000
-[task1] count=13250000
-[task1] count=13300000
-[task1] count=13350000
-[task1] count=13400000
-[task1] count=13450000
-[task1] count=13500000
-[task1] count=13550000
-[task1] count=13600000
-[task1] count=13650000
-[task1] count=13700000
-[task1] count=13750000
-[task1] count=13800000
-[task1] count=13850000
-[task1] count=13900000
-[task1] count=13950000
-[task1] count=14000000
-[task1] count=14050000
-[task1] count=14100000
-[task1] count=14150000
-[task1] count=14200000
-[task1] count=14250000
-[task1] count=14300000
-[task1] count=14350000
-[task1] count=14400000
-[task1] count=14450000
-[task1] count=14500000
-[task1] count=14550000
-[task1] count=14600000
-[task1] count=14650000
-[task1] count=14700000
-[task1] count=14750000
-[task1] count=14800000
-[task1] count=14850000
-[task1] count=14900000
-[task1] count=14950000
-[task1] count=15000000
-[task1] count=15050000
-[task1] count=15100000
-[task1] count=15150000
-[task1] count=15200000
-[task1] count=15250000
-[task1] count=15300000
-[task1] count=15350000
-[task1] count=15400000
-[task1] count=15450000
-[task1] count=15500000
-[task1] count=15550000
-[task1] count=15600000
-[task1] count=15650000
-[task1] count=15700000
-[task1] count=15750000
-[task1] count=15800000
-[task1] count=15850000
-[task1] count=15900000
-[task1] count=15950000
-[task1] count=16000000
-[task1] count=16050000
-[task1] count=16100000
-[task1] count=16150000
-[task1] count=16200000
-[task1] count=16250000
-[task1] count=16300000
-[task1] count=16350000
-[task1] count=16400000
-[task1] count=16450000
-[task1] count=16500000
-[task1] count=16550000
-[task1] count=16600000
-[task1] count=16650000
-[task1] count=16700000
-[task1] count=16750000
-[task1] count=16800000
-[task1] count=16850000
-[task1] count=16900000
-[task1] count=16950000
-[task1] count=17000000
-[task1] count=17050000
-[task1] count=17100000
-[task1] count=17150000
-[task1] count=17200000
-[task1] count=17250000
-[task1] count=17300000
-[task1] count=17350000
-[task1] count=17400000
-[task1] count=17450000
-[task1] count=17500000
-[task1] count=17550000
-[task1] count=17600000
-[task1] count=17650000
-[task1] count=17700000
-[task1] count=17750000
-[task1] count=17800000
-[task1] count=17850000
-[task1] count=17900000
-[task1] count=17950000
-[task1] count=18000000
-[task1] count=18050000
-[task1] count=18100000
-[task1] count=18150000
-[task1] count=18200000
-[task1] count=18250000
-[task1] count=18300000
-[task1] count=18350000
-[task1] count=18400000
-[task1] count=18450000
-qemu-system-x86_64: terminating on signal 15 from pid 876909 (timeout)
+qemu-system-x86_64: terminating on signal 15 from pid 952843 (timeout)

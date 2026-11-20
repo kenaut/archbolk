@@ -218,6 +218,9 @@ impl Shell {
             "mem" => self.cmd_mem(),
             "history" => self.cmd_history(),
             "syscall" => self.cmd_syscall(),
+            "ps" => self.cmd_ps(),
+            "kill" => self.cmd_kill(args),
+            "spawn" => self.cmd_spawn(),
             _ => {
                 serial_println!("shell: unknown command '{}'", cmd);
                 serial_println!("Try 'help'.");
@@ -237,6 +240,9 @@ impl Shell {
         serial_println!("  mem      — show memory info");
         serial_println!("  history  — show command history");
         serial_println!("  syscall  — test syscall mechanism");
+        serial_println!("  ps       — list tasks");
+        serial_println!("  kill <id>— terminate a task");
+        serial_println!("  spawn    — create a test task");
     }
 
     fn cmd_help(&self) {
@@ -372,5 +378,59 @@ impl Shell {
             );
         }
         serial_println!("  unknown syscall returned {}", unknown_ret as isize);
+    }
+
+    fn cmd_ps(&self) {
+        use crate::scheduler::TaskInfo;
+        let mut infos = [TaskInfo {
+            id: 0,
+            name: "",
+            state: crate::scheduler::task::TaskState::Ready,
+            terminated: false,
+            rsp: 0,
+        }; 16];
+        let sched = crate::scheduler::SCHEDULER.lock();
+        let n = sched.list(&mut infos);
+        serial_println!("  ID  NAME        STATE      RSP");
+        for info in infos.iter().take(n) {
+            let state = match info.state {
+                crate::scheduler::task::TaskState::Ready => "Ready",
+                crate::scheduler::task::TaskState::Running => "Running",
+                crate::scheduler::task::TaskState::Blocked => "Blocked",
+            };
+            let marker = if info.id == sched.current_id() { "*" } else { " " };
+            let term = if info.terminated { " (dead)" } else { "" };
+            serial_println!(
+                "{} {:>2}  {:<10} {:<9} 0x{:x}{}",
+                marker, info.id, info.name, state, info.rsp, term
+            );
+        }
+        drop(sched);
+    }
+
+    fn cmd_kill(&self, mut args: core::str::SplitWhitespace) {
+        let Some(id_str) = args.next() else {
+            serial_println!("usage: kill <id>");
+            return;
+        };
+        let Ok(id) = id_str.parse::<usize>() else {
+            serial_println!("kill: invalid id '{}'", id_str);
+            return;
+        };
+        let ok = crate::scheduler::SCHEDULER.lock().kill(id);
+        if ok {
+            serial_println!("kill: task {} terminated", id);
+        } else {
+            serial_println!("kill: cannot terminate task {}", id);
+        }
+    }
+
+    fn cmd_spawn(&self) {
+        let name = "worker";
+        let id = crate::scheduler::spawn_dynamic(name, crate::spawned_task);
+        match id {
+            Some(id) => serial_println!("spawn: created task {} ('{}')", id, name),
+            None => serial_println!("spawn: no stacks or task slots available"),
+        }
     }
 }
