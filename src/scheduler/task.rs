@@ -32,6 +32,10 @@ pub struct Task {
     /// Kernel stack for this task (kept alive; frame lives inside it).
     #[allow(dead_code)]
     pub stack: &'static mut [u8],
+    /// Tick count at which a sleeping task should be woken (None = not sleeping).
+    pub wake_tick: Option<u64>,
+    /// Program break for user-space heap allocations.
+    pub brk: usize,
 }
 
 impl Task {
@@ -77,6 +81,8 @@ impl Task {
             user_mode: false,
             kernel_stack_top: stack_top,
             stack,
+            wake_tick: None,
+            brk: 0,
         }
     }
 
@@ -87,6 +93,7 @@ impl Task {
         entry: usize,
         user_stack_top: usize,
         kernel_stack: &'static mut [u8],
+        user_brk: usize,
     ) -> Self {
         let kernel_stack_top = kernel_stack.as_ptr() as usize + kernel_stack.len();
         // cs = 0x23 (USER_CODE_SEL 0x20 | RPL3), ss = 0x1b (USER_DATA_SEL 0x18 | RPL3)
@@ -100,6 +107,8 @@ impl Task {
             user_mode: true,
             kernel_stack_top,
             stack: kernel_stack,
+            wake_tick: None,
+            brk: user_brk,
         }
     }
 }

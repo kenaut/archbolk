@@ -210,6 +210,7 @@ fn spawn_user_demo() {
     // fresh page-table hierarchy, avoiding the kernel's identity huge pages.
     const USER_CODE_VADDR: usize = 0x200_0000_0000;
     const USER_STACK_VADDR: usize = 0x200_0010_0000; // stack grows down from here
+    const USER_HEAP_VADDR: usize = 0x200_0020_0000; // heap for sys_brk
 
     unsafe extern "C" {
         fn user_demo();
@@ -236,6 +237,15 @@ fn spawn_user_demo() {
         map_page(USER_STACK_VADDR, stack_frame, user_flags);
         let user_stack_top = USER_STACK_VADDR + 0x1000;
 
+        // Map 4 pages of user heap for sys_brk experiments.
+        for i in 0..4 {
+            let frame = memory::pfa::FRAME_ALLOCATOR
+                .lock()
+                .allocate()
+                .expect("OOM: user heap");
+            map_page(USER_HEAP_VADDR + i * 0x1000, frame, user_flags);
+        }
+
         // Kernel stack for ring-0 transitions (interrupt/syscall frames).
         static mut USER_KERNEL_STACK: core::mem::MaybeUninit<[u8; 16384]> =
             core::mem::MaybeUninit::uninit();
@@ -245,7 +255,7 @@ fn spawn_user_demo() {
         let entry = USER_CODE_VADDR + code_off;
         let id = scheduler::SCHEDULER
             .lock()
-            .spawn_user("user_demo", entry, user_stack_top, kernel_stack);
+            .spawn_user("user_demo", entry, user_stack_top, kernel_stack, USER_HEAP_VADDR);
         serial_println!(
             "User demo spawned: id={} entry=0x{:x} ustack=0x{:x}",
             id,

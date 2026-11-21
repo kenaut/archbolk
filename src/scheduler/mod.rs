@@ -61,9 +61,10 @@ impl Scheduler {
         entry: usize,
         user_stack_top: usize,
         kernel_stack: &'static mut [u8],
+        user_brk: usize,
     ) -> usize {
         let id = self.count;
-        self.tasks[id] = Some(Task::new_user(id, name, entry, user_stack_top, kernel_stack));
+        self.tasks[id] = Some(Task::new_user(id, name, entry, user_stack_top, kernel_stack, user_brk));
         self.count += 1;
         id
     }
@@ -169,6 +170,70 @@ impl Scheduler {
         }
     }
 
+    /// Put a task to sleep for `ticks` PIT ticks. Returns false for idle/terminated.
+    pub fn sleep(&mut self, id: usize, ticks: u64) -> bool {
+        if id == 0 || id >= self.count {
+            return false;
+        }
+        if let Some(ref mut task) = self.tasks[id] {
+            if task.terminated {
+                return false;
+            }
+            task.state = TaskState::Blocked;
+            task.wake_tick = Some(crate::interrupts::get_tick_count() + ticks);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Wake all sleeping tasks whose wake time has passed.
+    pub fn wake_expired(&mut self, now: u64) {
+        for i in 1..self.count {
+            if let Some(ref mut task) = self.tasks[i] {
+                if task.state == TaskState::Blocked && !task.terminated {
+                    if let Some(wt) = task.wake_tick {
+                        if now >= wt {
+                            task.state = TaskState::Ready;
+                            task.wake_tick = None;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Whether a task is currently blocked (sleeping).
+    #[allow(dead_code)]
+    pub fn is_blocked(&self, id: usize) -> bool {
+        self.tasks
+            .get(id)
+            .and_then(|t| t.as_ref())
+            .map(|t| t.state == TaskState::Blocked)
+            .unwrap_or(false)
+    }
+
+    /// Return a task's program break.
+    pub fn brk(&self, id: usize) -> usize {
+        self.tasks
+            .get(id)
+            .and_then(|t| t.as_ref())
+            .map(|t| t.brk)
+            .unwrap_or(0)
+    }
+
+    /// Set a task's program break to `addr`. Returns the new break.
+    pub fn set_brk(&mut self, id: usize, addr: usize) -> usize {
+        if let Some(ref mut task) = self.tasks.get_mut(id).and_then(|t| t.as_mut()) {
+            if addr >= task.brk {
+                task.brk = addr;
+            }
+            task.brk
+        } else {
+            0
+        }
+    }
+
     /// Fill `out` with a snapshot of all live tasks. Returns the number filled.
     pub fn list(&self, out: &mut [TaskInfo]) -> usize {
         let mut n = 0;
@@ -221,8 +286,26 @@ pub fn spawn_dynamic(name: &'static str, entry: fn() -> !) -> Option<usize> {
 /// Set to true by the timer IRQ to request a reschedule.
 static NEED_RESCHEDULE: AtomicBool = AtomicBool::new(false);
 
+/// When set, context switches are deferred (e.g. a syscall is running on the
+/// user's stack and must not be switched away mid-frame).
+static DEFER_SCHEDULE: AtomicBool = AtomicBool::new(false);
+
+/// Defer/resume context switching around critical syscall sections.
+pub fn set_defer_schedule(defer: bool) {
+    DEFER_SCHEDULE.store(defer, Ordering::Release);
+}
+
 /// Called from the timer IRQ handler (interrupt context).
 pub fn timer_tick() {
+    // Wake any sleeping tasks whose time has elapsed.
+    let now = crate::interrupts::get_tick_count();
+    SCHEDULER.lock().wake_expired(now);
+    NEED_RESCHEDULE.store(true, Ordering::Release);
+}
+
+/// Ask the scheduler to reschedule on the next interrupt return (used by
+/// sys_yield from syscall context, where interrupts are disabled).
+pub fn request_reschedule() {
     NEED_RESCHEDULE.store(true, Ordering::Release);
 }
 
@@ -234,6 +317,9 @@ pub fn timer_tick() {
 #[unsafe(no_mangle)]
 pub extern "C" fn switch_from_interrupt(old_rsp: usize) -> usize {
     if !NEED_RESCHEDULE.swap(false, Ordering::AcqRel) {
+        return 0;
+    }
+    if DEFER_SCHEDULE.load(Ordering::Acquire) {
         return 0;
     }
     SCHEDULER.lock().pick_next(old_rsp)

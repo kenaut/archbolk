@@ -444,10 +444,40 @@ syscall_entry:
  */
 .globl user_demo
 user_demo:
-    mov rax, 1                 /* SYS_WRITE */
-    mov rdi, 1                 /* fd = stdout */
+    /* sys_write("Hello from ring 3!\n") */
+    mov rax, 1
+    mov rdi, 1
     lea rsi, [rip + user_msg]
-    mov rdx, 19                 /* user_msg_len as immediate */
+    mov rdx, 19
+    syscall
+
+    /* sys_getpid() — result in rax (not printed, verified via kernel log) */
+    mov rax, 39
+    syscall
+
+    /* sys_sched_yield() */
+    mov rax, 24
+    syscall
+    /* (sched_yield is a no-op in this kernel; timer IRQ handles preemption) */
+
+    /* sys_nanosleep(20 ms) */
+    mov rax, 35
+    mov rdi, 20
+    syscall
+
+    /* sys_brk(0) query, then extend by 0x1000 */
+    mov rax, 12
+    xor rdi, rdi
+    syscall
+    mov rdi, rax
+    add rdi, 4096
+    mov rax, 12
+    syscall
+
+    mov rax, 1
+    mov rdi, 1
+    lea rsi, [rip + done_msg]
+    mov rdx, 24
     syscall
 
     mov rax, 60                /* SYS_EXIT */
@@ -459,4 +489,5 @@ user_demo:
 
 user_msg:
     .ascii "Hello from ring 3!\n"
-.set user_msg_len, 19
+done_msg:
+    .ascii "syscalls from ring3 OK!\n"

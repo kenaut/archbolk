@@ -6,8 +6,11 @@ const MSR_LSTAR: u32 = 0xC000_0082;
 const MSR_CSTAR: u32 = 0xC000_0083;
 const MSR_SF_MASK: u32 = 0xC000_0084;
 
-/// Syscall numbers (Linux-compatible subset).
+/// Syscall numbers (Linux x86-64 compatible subset).
 pub const SYS_WRITE: u64 = 1;
+pub const SYS_BRK: u64 = 12;
+pub const SYS_SCHED_YIELD: u64 = 24;
+pub const SYS_NANOSLEEP: u64 = 35;
 pub const SYS_GETPID: u64 = 39;
 pub const SYS_EXIT: u64 = 60;
 
@@ -137,9 +140,54 @@ pub extern "C" fn syscall_handler(frame: &mut SyscallFrame) {
         }
 
         SYS_GETPID => {
-            // sys_getpid() -> pid_t
-            // For now, always return 1 (we have one "process")
-            frame.rax = 1;
+            // sys_getpid() -> pid_t (the current task ID)
+            frame.rax = crate::scheduler::SCHEDULER.lock().current_id() as u64;
+        }
+
+        SYS_SCHED_YIELD => {
+            // sys_sched_yield(): no-op. The timer IRQ already provides
+            // round-robin preemption; forcing a switch from syscall context
+            // (mid-frame on the user stack) races with the normal IRQ path.
+            frame.rax = 0;
+        }
+
+        SYS_NANOSLEEP => {
+            // Simplified nanosleep: rdi = milliseconds to sleep, returns 0.
+            // (Linux passes struct timespec*, but ms is easier for our demo.)
+            let ms = frame.rdi;
+            let ticks = core::cmp::max(1, ms / 10); // PIT runs at ~100 Hz
+            frame.rax = 0;
+            // Busy-wait on the PIT tick while continuously requesting a
+            // reschedule so other tasks run. Avoids blocking-state races in
+            // syscall context (where the CPU is already in ring 0).
+            let target = crate::interrupts::get_tick_count() + ticks;
+            // We're running on the user stack in syscall context; defer context
+            // switches so the timer can advance ticks without switching us out
+            // mid-frame. Enable interrupts so the PIT keeps ticking.
+            crate::scheduler::set_defer_schedule(true);
+            unsafe {
+                asm!("sti");
+            }
+            while crate::interrupts::get_tick_count() < target {
+                unsafe {
+                    asm!("pause");
+                }
+            }
+            unsafe {
+                asm!("cli");
+            }
+            crate::scheduler::set_defer_schedule(false);
+        }
+
+        SYS_BRK => {
+            // sys_brk(addr): extend/shrink the user heap. addr=0 queries.
+            let id = crate::scheduler::SCHEDULER.lock().current_id();
+            let mut sched = crate::scheduler::SCHEDULER.lock();
+            frame.rax = if frame.rdi == 0 {
+                sched.brk(id) as u64
+            } else {
+                sched.set_brk(id, frame.rdi as usize) as u64
+            };
         }
 
         SYS_EXIT => {
