@@ -13,7 +13,7 @@ Memory map entries: 7
   [  6] base=0x000000fd00000000 len=0x0000000300000000 type=Reserved
 Lower memory: 639 KiB
 Upper memory: 129920 KiB
-Frame allocator: 32178 free frames (128712 KiB)
+Frame allocator: 32174 free frames (128696 KiB)
 Page tables: CR3 = 0x0000000000001000
   Extending identity map to 0x0000000008000000
   PML4[0] -> 0x0000000000002000
@@ -24,15 +24,15 @@ Heap: 64 KiB at 0x0000444400000000
 Heap test: Box<u64> = 42
 Heap test: Vec<u64> len = 100
 Heap allocation tests passed.
-module at 0x402000-0x404800 (10240 bytes)
-tarfs: initrd at 0x402000-0x404800 (10240 bytes)
+module at 0x40a000-0x40c800 (10240 bytes)
+tarfs: initrd at 0x40a000-0x40c800 (10240 bytes)
 Memory subsystem initialized.
-GDT/TSS: initialized (TSS at 0x22d088)
+GDT/TSS: initialized (TSS at 0x231088)
 Interrupt subsystem initialized
-Syscall: entry at 0x11da92
+Syscall: entry at 0x120b32
 Keyboard: initialized
 Scheduler: initialized with 1 task(s)
-spawn_user: 'demo' id=2 slot=0 entry=0x20000000ad4
+spawn_user: 'demo' id=2 slot=0 entry=0x20000000b74
 Scheduler ready. Type on the serial console:
 [init] Testing serial...
 [init] Testing serial input...
@@ -248,16 +248,17 @@ $ [task1] count=50000
 [task1] count=10350000
 [task1] count=10400000
 [task1] count=10450000
-ls
+[task1] count=10500000
+[task1] count=10550000
+[task1] count=10600000
+l[task1] count=10650000
+[task1] count=10700000
+s
 tarfs contents:
   -  welcome.txt (71 bytes)
   -  version.txt (91 bytes)
-$ [task1] count=10500000
-[task1] count=10550000
-[task1] count=10600000
-[task1] count=10650000
-[task1] count=10700000
-[task1] count=10750000
+  -  elf_hello.elf (4928 bytes)
+$ [task1] count=10750000
 [task1] count=10800000
 [task1] count=10850000
 [task1] count=10900000
@@ -344,17 +345,19 @@ $ [task1] count=10500000
 [task1] count=14950000
 [task1] count=15000000
 [task1] count=15050000
-cat welcome.txt
-Welcome to archbolk!
-A freestanding Rust kernel with Ring 3 user mode.
-$ [task1] count=15100000
+[task1] count=15100000
 [task1] count=15150000
 [task1] count=15200000
 [task1] count=15250000
 [task1] count=15300000
 [task1] count=15350000
-[task1] count=15400000
+exec elf_hello.elf
+elf: PT_LOAD vaddr=0x20700000000 filesz=156 memsz=156 pages=0x20700000000-0x20700001000
+exec: 'elf_hello.elf' id=3 entry=0x20700000000 stack=0x20700101000
+exec: started task 3
+$ [task1] count=15400000
 [task1] count=15450000
+Hello from external ELF!syscall: task 3 exit(0)
 [task1] count=15500000
 [task1] count=15550000
 [task1] count=15600000
@@ -438,12 +441,7 @@ $ [task1] count=15100000
 [task1] count=19500000
 [task1] count=19550000
 [task1] count=19600000
-ps
-  ID  NAME        STATE      RSP
-*  0  idle       Running   0x7ebe0
-   1  test1      Ready     0x16cf10
-   2  demo       Blocked   0x20000100d00 (dead)
-$ [task1] count=19650000
+[task1] count=19650000
 [task1] count=19700000
 [task1] count=19750000
 [task1] count=19800000
@@ -534,15 +532,8 @@ $ [task1] count=19650000
 [task1] count=24050000
 [task1] count=24100000
 [task1] count=24150000
-spawn_user shell
-spawn_user: 'shell' id=3 slot=1 entry=0x20100000b71
-spawn_user: task 3 created
-$ [task1] count=24200000
+[task1] count=24200000
 [task1] count=24250000
-$ h
-h=help e=echo t=time q=quit
-up$ q
-syscall: task 3 exit(0)
 [task1] count=24300000
 [task1] count=24350000
 [task1] count=24400000
@@ -1089,4 +1080,18 @@ syscall: task 3 exit(0)
 [task1] count=51450000
 [task1] count=51500000
 [task1] count=51550000
-qemu-system-x86_64: terminating on signal 15 from pid 3154155 (timeout)
+[task1] count=51600000
+[task1] count=51650000
+[task1] count=51700000
+[task1] count=51750000
+[task1] count=51800000
+[task1] count=51850000
+[task1] count=51900000
+[task1] count=51950000
+[task1] count=52000000
+[task1] count=52050000
+[task1] count=52100000
+[task1] count=52150000
+[task1] count=52200000
+[task1] count=52250000
+qemu-system-x86_64: terminating on signal 15 from pid 3548893 (timeout)

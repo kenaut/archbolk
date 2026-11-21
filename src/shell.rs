@@ -218,6 +218,7 @@ impl Shell {
             "ls" => self.cmd_ls(),
             "cat" => self.cmd_cat(args),
             "spawn_user" => self.cmd_spawn_user(args),
+            "exec" => self.cmd_exec(args),
             _ => {
                 serial_println!("shell: unknown command '{}'", cmd);
                 serial_println!("Try 'help'.");
@@ -243,6 +244,7 @@ impl Shell {
         serial_println!("  ls       — list initrd files");
         serial_println!("  cat <f>  — print a file from initrd");
         serial_println!("  spawn_user <demo|worker|shell> — spawn a ring-3 task");
+        serial_println!("  exec <file> — load & run an ELF program from initrd");
     }
 
     fn cmd_help(&self) {
@@ -449,6 +451,20 @@ impl Shell {
         match crate::spawn_user_program(name) {
             Some(id) => serial_println!("spawn_user: task {} created", id),
             None => serial_println!("spawn_user: unknown program or no slots left"),
+        }
+    }
+
+    fn cmd_exec(&self, mut args: core::str::SplitWhitespace) {
+        let name = match args.next() {
+            Some(n) => n,
+            None => {
+                serial_println!("usage: exec <elf-file>");
+                return;
+            }
+        };
+        match crate::exec_elf(name) {
+            Ok(id) => serial_println!("exec: started task {}", id),
+            Err(e) => serial_println!("exec: {}", e),
         }
     }
 

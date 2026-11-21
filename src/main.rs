@@ -13,6 +13,7 @@ mod shell;
 mod scheduler;
 mod syscall;
 mod gdt;
+mod elf;
 
 use core::panic::PanicInfo;
 
@@ -301,6 +302,65 @@ pub fn spawn_user_program(name: &str) -> Option<usize> {
 /// Spawn the initial demo user program at boot.
 fn spawn_user_demo() {
     spawn_user_program("demo");
+}
+
+/// Load a statically-linked ELF64 user program from initrd and spawn it.
+///
+/// The program must be linked for `ELF_USER_BASE` (slot 7's virtual base).
+/// Returns the task ID on success.
+pub fn exec_elf(name: &str) -> Result<usize, &'static str> {
+    use memory::paging::{map_page, EntryFlags};
+
+    let elf = fs::tarfs::read(name).ok_or("file not found in initrd")?;
+    let slot = MAX_USER_PROGRAMS - 1; // dedicated slot for ELF programs
+    let base = USER_SPACE_BASE + slot * USER_SLOT_STRIDE;
+    let stack_vaddr = base + 0x10_0000;
+    let heap_vaddr = base + 0x20_0000;
+
+    let mut user_flags = EntryFlags::new();
+    user_flags.set(EntryFlags::PRESENT);
+    user_flags.set(EntryFlags::WRITABLE);
+    user_flags.set(EntryFlags::USER);
+
+    unsafe {
+        let entry = elf::load(elf, user_flags).ok_or("ELF load failed")?;
+
+        // Sanity: entry must lie within this user slot.
+        if entry < base || entry >= base + USER_SLOT_STRIDE {
+            serial_println!(
+                "exec: entry 0x{:x} outside slot base 0x{:x} — was the ELF linked for the right base?",
+                entry, base
+            );
+            return Err("ELF entry outside user slot (wrong link address)");
+        }
+
+        let stack_frame = memory::pfa::FRAME_ALLOCATOR
+            .lock()
+            .allocate()
+            .ok_or("OOM: user stack")?;
+        map_page(stack_vaddr, stack_frame, user_flags);
+        let user_stack_top = stack_vaddr + 0x1000;
+
+        for i in 0..4 {
+            let frame = memory::pfa::FRAME_ALLOCATOR
+                .lock()
+                .allocate()
+                .ok_or("OOM: user heap")?;
+            map_page(heap_vaddr + i * 0x1000, frame, user_flags);
+        }
+
+        let kslot = USER_KERNEL_STACKS[slot].as_mut_ptr() as *mut u8;
+        let kernel_stack = core::slice::from_raw_parts_mut(kslot, 16384);
+
+        let id = scheduler::SCHEDULER
+            .lock()
+            .spawn_user("elf", entry, user_stack_top, kernel_stack, heap_vaddr);
+        serial_println!(
+            "exec: '{}' id={} entry=0x{:x} stack=0x{:x}",
+            name, id, entry, user_stack_top
+        );
+        Ok(id)
+    }
 }
 
 /// Dynamically spawned worker: prints a periodic heartbeat until terminated.

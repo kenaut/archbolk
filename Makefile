@@ -9,6 +9,7 @@ build:
 	cargo +nightly build
 
 iso: build
+	sh user/build.sh
 	sh tools/make_initrd.sh
 	mkdir -p iso/boot/grub
 	cp $(KERNEL) iso/boot/archbolk-kernel
