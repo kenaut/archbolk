@@ -184,5 +184,16 @@ fn init_multiboot2(mbi_addr: usize) {
     // Test heap allocation
     heap::test_alloc();
 
+    // Locate the GRUB-loaded initrd module (tar archive).
+    for module in boot_info.module_tags() {
+        serial_println!(
+            "module at 0x{:x}-0x{:x} ({} bytes)",
+            module.start_address(),
+            module.end_address(),
+            module.end_address() - module.start_address()
+        );
+        crate::fs::tarfs::init(module.start_address() as u64, module.end_address() as u64);
+    }
+
     serial_println!("Memory subsystem initialized.");
 }

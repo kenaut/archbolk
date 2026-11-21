@@ -1,0 +1,2 @@
+archbolk v0.1.0
+Features: Multiboot2, Paging, Preemptive Scheduler, Syscalls, Ring3, tarfs

@@ -219,6 +219,8 @@ impl Shell {
             "ps" => self.cmd_ps(),
             "kill" => self.cmd_kill(args),
             "spawn" => self.cmd_spawn(),
+            "ls" => self.cmd_ls(),
+            "cat" => self.cmd_cat(args),
             _ => {
                 serial_println!("shell: unknown command '{}'", cmd);
                 serial_println!("Try 'help'.");
@@ -241,6 +243,8 @@ impl Shell {
         serial_println!("  ps       — list tasks");
         serial_println!("  kill <id>— terminate a task");
         serial_println!("  spawn    — create a test task");
+        serial_println!("  ls       — list initrd files");
+        serial_println!("  cat <f>  — print a file from initrd");
     }
 
     fn cmd_help(&self) {
@@ -429,6 +433,30 @@ impl Shell {
         match id {
             Some(id) => serial_println!("spawn: created task {} ('{}')", id, name),
             None => serial_println!("spawn: no stacks or task slots available"),
+        }
+    }
+
+    fn cmd_ls(&self) {
+        crate::fs::tarfs::list();
+    }
+
+    fn cmd_cat(&self, mut args: core::str::SplitWhitespace) {
+        let name = match args.next() {
+            Some(n) => n,
+            None => {
+                serial_println!("usage: cat <filename>");
+                return;
+            }
+        };
+        match crate::fs::tarfs::read(name) {
+            Some(data) => {
+                let s = core::str::from_utf8(data).unwrap_or("<binary data>");
+                serial_print!("{}", s);
+                if !s.ends_with('\n') {
+                    serial_print!("\n");
+                }
+            }
+            None => serial_println!("cat: {}: not found", name),
         }
     }
 }

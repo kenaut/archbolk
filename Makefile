@@ -9,9 +9,11 @@ build:
 	cargo +nightly build
 
 iso: build
+	sh tools/make_initrd.sh
 	mkdir -p iso/boot/grub
 	cp $(KERNEL) iso/boot/archbolk-kernel
 	cp boot/grub/grub.cfg iso/boot/grub/grub.cfg
+	cp initrd.img iso/boot/initrd.img
 	grub2-mkrescue -o $(ISO) iso 2>/dev/null
 	rm -rf iso
 

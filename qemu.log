@@ -1,8 +1,8 @@
 archbolk serial output OK
-Boot protocol: Multiboot2 (magic=0x00000720)
+Boot protocol: Multiboot2 (magic=0x00000738)
 boot_info_addr = 0x100170, is_pvh = false
 mbi_addr = 0x100170
-MBI raw bytes: 20 07 00 00 00 00 00 00 15 00 00 00 0c 00 00 00 00 00 10 00 eb 50 8b 45 01 00 00 00 09 00 00 00 00 97 fd 07 e7 00 00 00 02 00 00 00 12 00 00 00 47 52 55 42 20 32 2e 31 32 00 8b 55 e4 29 c2 89 
+MBI raw bytes: 38 07 00 00 00 00 00 00 15 00 00 00 0c 00 00 00 00 00 10 00 eb 50 8b 45 01 00 00 00 09 00 00 00 00 97 fd 07 e7 00 00 00 02 00 00 00 12 00 00 00 47 52 55 42 20 32 2e 31 32 00 8b 55 e4 29 c2 89 
 Memory map entries: 7
   [  0] base=0x0000000000000000 len=0x000000000009fc00 type=Available
   [  1] base=0x000000000009fc00 len=0x0000000000000400 type=Reserved
@@ -13,7 +13,7 @@ Memory map entries: 7
   [  6] base=0x000000fd00000000 len=0x0000000300000000 type=Reserved
 Lower memory: 639 KiB
 Upper memory: 129920 KiB
-Frame allocator: 32211 free frames (128844 KiB)
+Frame allocator: 32208 free frames (128832 KiB)
 Page tables: CR3 = 0x0000000000001000
   Extending identity map to 0x0000000008000000
   PML4[0] -> 0x0000000000002000
@@ -24,15 +24,210 @@ Heap: 64 KiB at 0x0000444400000000
 Heap test: Box<u64> = 42
 Heap test: Vec<u64> len = 100
 Heap allocation tests passed.
+module at 0x3e3000-0x3e5800 (10240 bytes)
+tarfs: initrd at 0x3e3000-0x3e5800 (10240 bytes)
 Memory subsystem initialized.
-GDT/TSS: initialized (TSS at 0x20c070)
+GDT/TSS: initialized (TSS at 0x20f080)
 Interrupt subsystem initialized
-Syscall: entry at 0x11acf2
+Syscall: entry at 0x11c752
 Keyboard: initialized
 Scheduler: initialized with 1 task(s)
-User demo spawned: id=2 entry=0x20000000d34 ustack=0x20000101000
+User demo spawned: id=2 entry=0x20000000794 ustack=0x20000101000
 Scheduler ready. Type on the serial console:
 [init] Testing serial...
 [init] Testing serial input...
 [init] Serial input drained.
-[task1] count=qemu-system-x86_64: terminating on signal 15 from pid 1283142 (timeout)
+Hello from ring 3!
+syscalls from ring3 OK!
+syscall: task 2 exit(0)
+$ [task1] count=50000
+[task1] count=100000
+[task1] count=150000
+[task1] count=200000
+[task1] count=250000
+[task1] count=300000
+[task1] count=350000
+[task1] count=400000
+[task1] count=450000
+[task1] count=500000
+[task1] count=550000
+[task1] count=600000
+[task1] count=650000
+[task1] count=700000
+[task1] count=750000
+[task1] count=800000
+[task1] count=850000
+[task1] count=900000
+[task1] count=950000
+[task1] count=1000000
+[task1] count=1050000
+[task1] count=1100000
+[task1] count=1150000
+[task1] count=1200000
+[task1] count=1250000
+[task1] count=1300000
+[task1] count=1350000
+[task1] count=1400000
+[task1] count=1450000
+[task1] count=1500000
+[task1] count=1550000
+[task1] count=1600000
+[task1] count=1650000
+[task1] count=1700000
+[task1] count=1750000
+[task1] count=1800000
+[task1] count=1850000
+[task1] count=1900000
+[task1] count=1950000
+[task1] count=2000000
+[task1] count=2050000
+[task1] count=2100000
+[task1] count=2150000
+[task1] count=2200000
+[task1] count=2250000
+[task1] count=2300000
+[task1] count=2350000
+[task1] count=2400000
+[task1] count=2450000
+[task1] count=2500000
+[task1] count=2550000
+[task1] count=2600000
+[task1] count=2650000
+[task1] count=2700000
+[task1] count=2750000
+[task1] count=2800000
+[task1] count=2850000
+[task1] count=2900000
+[task1] count=2950000
+[task1] count=3000000
+[task1] count=3050000
+[task1] count=3100000
+[task1] count=3150000
+[task1] count=3200000
+[task1] count=3250000
+[task1] count=3300000
+[task1] count=3350000
+[task1] count=3400000
+[task1] count=3450000
+[task1] count=3500000
+[task1] count=3550000
+[task1] count=3600000
+[task1] count=3650000
+[task1] count=3700000
+[task1] count=3750000
+[task1] count=3800000
+[task1] count=3850000
+[task1] count=3900000
+[task1] count=3950000
+[task1] count=4000000
+[task1] count=4050000
+[task1] count=4100000
+[task1] count=4150000
+[task1] count=4200000
+[task1] count=4250000
+[task1] count=4300000
+[task1] count=4350000
+[task1] count=4400000
+[task1] count=4450000
+[task1] count=4500000
+[task1] count=4550000
+[task1] count=4600000
+[task1] count=4650000
+[task1] count=4700000
+[task1] count=4750000
+[task1] count=4800000
+[task1] count=4850000
+[task1] count=4900000
+[task1] count=4950000
+[task1] count=5000000
+[task1] count=5050000
+[task1] count=5100000
+[task1] count=5150000
+[task1] count=5200000
+[task1] count=5250000
+[task1] count=5300000
+[task1] count=5350000
+[task1] count=5400000
+[task1] count=5450000
+[task1] count=5500000
+[task1] count=5550000
+[task1] count=5600000
+[task1] count=5650000
+[task1] count=5700000
+[task1] count=5750000
+[task1] count=5800000
+[task1] count=5850000
+[task1] count=5900000
+[task1] count=5950000
+[task1] count=6000000
+[task1] count=6050000
+[task1] count=6100000
+[task1] count=6150000
+[task1] count=6200000
+[task1] count=6250000
+[task1] count=6300000
+[task1] count=6350000
+[task1] count=6400000
+[task1] count=6450000
+[task1] count=6500000
+[task1] count=6550000
+[task1] count=6600000
+[task1] count=6650000
+[task1] count=6700000
+[task1] count=6750000
+[task1] count=6800000
+[task1] count=6850000
+[task1] count=6900000
+[task1] count=6950000
+[task1] count=7000000
+[task1] count=7050000
+[task1] count=7100000
+[task1] count=7150000
+[task1] count=7200000
+[task1] count=7250000
+[task1] count=7300000
+[task1] count=7350000
+[task1] count=7400000
+[task1] count=7450000
+[task1] count=7500000
+[task1] count=7550000
+[task1] count=7600000
+[task1] count=7650000
+[task1] count=7700000
+[task1] count=7750000
+[task1] count=7800000
+[task1] count=7850000
+[task1] count=7900000
+[task1] count=7950000
+[task1] count=8000000
+[task1] count=8050000
+[task1] count=8100000
+[task1] count=8150000
+[task1] count=8200000
+[task1] count=8250000
+[task1] count=8300000
+[task1] count=8350000
+[task1] count=8400000
+[task1] count=8450000
+[task1] count=8500000
+[task1] count=8550000
+[task1] count=8600000
+[task1] count=8650000
+[task1] count=8700000
+[task1] count=8750000
+[task1] count=8800000
+[task1] count=8850000
+[task1] count=8900000
+[task1] count=8950000
+[task1] count=9000000
+[task1] count=9050000
+[task1] count=9100000
+[task1] count=9150000
+[task1] count=9200000
+[task1] count=9250000
+[task1] count=9300000
+[task1] count=9350000
+[task1] count=9400000
+[task1] count=9450000
+[task1] count=9500000
+qemu-system-x86_64: terminating on signal 15 from pid 1879676 (timeout)

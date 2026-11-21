@@ -6,6 +6,7 @@ extern crate alloc;
 mod vga_buffer;
 mod serial;
 mod memory;
+mod fs;
 mod interrupts;
 mod keyboard;
 mod shell;
