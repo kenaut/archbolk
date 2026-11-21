@@ -24,15 +24,15 @@ Heap: 64 KiB at 0x0000444400000000
 Heap test: Box<u64> = 42
 Heap test: Vec<u64> len = 100
 Heap allocation tests passed.
-module at 0x40a000-0x40c800 (10240 bytes)
-tarfs: initrd at 0x40a000-0x40c800 (10240 bytes)
+module at 0x40b000-0x410000 (20480 bytes)
+tarfs: initrd at 0x40b000-0x410000 (20480 bytes)
 Memory subsystem initialized.
 GDT/TSS: initialized (TSS at 0x231088)
 Interrupt subsystem initialized
-Syscall: entry at 0x120b32
+Syscall: entry at 0x1215f2
 Keyboard: initialized
 Scheduler: initialized with 1 task(s)
-spawn_user: 'demo' id=2 slot=0 entry=0x20000000b74
+spawn_user: 'demo' id=2 slot=0 entry=0x20000000634
 Scheduler ready. Type on the serial console:
 [init] Testing serial...
 [init] Testing serial input...
@@ -246,19 +246,19 @@ $ [task1] count=50000
 [task1] count=10250000
 [task1] count=10300000
 [task1] count=10350000
-[task1] count=10400000
+exec elf_hello.elf
+elf: PT_LOAD vaddr=0x1000 -> 0x20100000000 filesz=156 memsz=156
+exec: 'elf_hello.elf' id=3 slot=1 entry=0x20100000000
+exec: started task 3
+$ [task1] count=10400000
 [task1] count=10450000
+Hello from external ELF!syscall: task 3 exit(0)
 [task1] count=10500000
 [task1] count=10550000
 [task1] count=10600000
-l[task1] count=10650000
+[task1] count=10650000
 [task1] count=10700000
-s
-tarfs contents:
-  -  welcome.txt (71 bytes)
-  -  version.txt (91 bytes)
-  -  elf_hello.elf (4928 bytes)
-$ [task1] count=10750000
+[task1] count=10750000
 [task1] count=10800000
 [task1] count=10850000
 [task1] count=10900000
@@ -351,13 +351,8 @@ $ [task1] count=10750000
 [task1] count=15250000
 [task1] count=15300000
 [task1] count=15350000
-exec elf_hello.elf
-elf: PT_LOAD vaddr=0x20700000000 filesz=156 memsz=156 pages=0x20700000000-0x20700001000
-exec: 'elf_hello.elf' id=3 entry=0x20700000000 stack=0x20700101000
-exec: started task 3
-$ [task1] count=15400000
+[task1] count=15400000
 [task1] count=15450000
-Hello from external ELF!syscall: task 3 exit(0)
 [task1] count=15500000
 [task1] count=15550000
 [task1] count=15600000
@@ -439,8 +434,16 @@ Hello from external ELF!syscall: task 3 exit(0)
 [task1] count=19400000
 [task1] count=19450000
 [task1] count=19500000
-[task1] count=19550000
+exec rust_hello.elf
+elf: PT_LOAD vaddr=0x1000 -> 0x20200000000 filesz=36 memsz=36
+elf: PT_LOAD vaddr=0x1028 -> 0x20200000028 filesz=4132 memsz=4132
+elf: PT_LOAD vaddr=0x2050 -> 0x20200001050 filesz=160 memsz=160
+exec: 'rust_hello.elf' id=4 slot=2 entry=0x20200000000
+exec: started task 4
+$ [task1] count=19550000
 [task1] count=19600000
+Hello from a Rust user program!
+syscall: task 4 exit(0)
 [task1] count=19650000
 [task1] count=19700000
 [task1] count=19750000
@@ -1080,18 +1083,4 @@ Hello from external ELF!syscall: task 3 exit(0)
 [task1] count=51450000
 [task1] count=51500000
 [task1] count=51550000
-[task1] count=51600000
-[task1] count=51650000
-[task1] count=51700000
-[task1] count=51750000
-[task1] count=51800000
-[task1] count=51850000
-[task1] count=51900000
-[task1] count=51950000
-[task1] count=52000000
-[task1] count=52050000
-[task1] count=52100000
-[task1] count=52150000
-[task1] count=52200000
-[task1] count=52250000
-qemu-system-x86_64: terminating on signal 15 from pid 3548893 (timeout)
+qemu-system-x86_64: terminating on signal 15 from pid 3570401 (timeout)

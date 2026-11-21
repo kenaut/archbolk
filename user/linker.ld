@@ -1,8 +1,9 @@
 ENTRY(_start)
 SECTIONS
 {
-    /* ELF user slot 7 base (MAX_USER_PROGRAMS - 1). */
-    . = 0x20700000000;
+    /* Link base: programs are loaded at a dynamic user slot base + this
+     * offset. RIP-relative addressing makes the code position-independent. */
+    . = 0x1000;
     .text : ALIGN(4096) {
         *(.text*)
     }

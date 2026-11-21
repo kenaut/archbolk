@@ -265,9 +265,14 @@ pub fn spawn_user_program(name: &str) -> Option<usize> {
 
     unsafe {
         let prog_addr = entry_fn;
-        let code_phys = prog_addr & !0xfff;
         let code_off = prog_addr & 0xfff;
-        map_page(code_vaddr, code_phys, user_flags);
+        // Map several pages of the kernel's user-code area: all built-in
+        // user programs and their string literals live here and may cross a
+        // 4 KiB page boundary.
+        for i in 0..4 {
+            let code_phys = (prog_addr & !0xfff) + i * 0x1000;
+            map_page(code_vaddr + i * 0x1000, code_phys, user_flags);
+        }
 
         let stack_frame = memory::pfa::FRAME_ALLOCATOR
             .lock()
@@ -306,13 +311,17 @@ fn spawn_user_demo() {
 
 /// Load a statically-linked ELF64 user program from initrd and spawn it.
 ///
-/// The program must be linked for `ELF_USER_BASE` (slot 7's virtual base).
+/// The program is linked at a low base (0x1000) and relocated into a freshly
+/// allocated user slot, so multiple programs can run concurrently.
 /// Returns the task ID on success.
 pub fn exec_elf(name: &str) -> Result<usize, &'static str> {
     use memory::paging::{map_page, EntryFlags};
 
     let elf = fs::tarfs::read(name).ok_or("file not found in initrd")?;
-    let slot = MAX_USER_PROGRAMS - 1; // dedicated slot for ELF programs
+    let slot = USER_SLOT_NEXT.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+    if slot >= MAX_USER_PROGRAMS {
+        return Err("no free user slots");
+    }
     let base = USER_SPACE_BASE + slot * USER_SLOT_STRIDE;
     let stack_vaddr = base + 0x10_0000;
     let heap_vaddr = base + 0x20_0000;
@@ -323,15 +332,9 @@ pub fn exec_elf(name: &str) -> Result<usize, &'static str> {
     user_flags.set(EntryFlags::USER);
 
     unsafe {
-        let entry = elf::load(elf, user_flags).ok_or("ELF load failed")?;
-
-        // Sanity: entry must lie within this user slot.
+        let entry = elf::load(elf, user_flags, base).ok_or("ELF load failed")?;
         if entry < base || entry >= base + USER_SLOT_STRIDE {
-            serial_println!(
-                "exec: entry 0x{:x} outside slot base 0x{:x} — was the ELF linked for the right base?",
-                entry, base
-            );
-            return Err("ELF entry outside user slot (wrong link address)");
+            return Err("ELF entry outside user slot");
         }
 
         let stack_frame = memory::pfa::FRAME_ALLOCATOR
@@ -356,8 +359,8 @@ pub fn exec_elf(name: &str) -> Result<usize, &'static str> {
             .lock()
             .spawn_user("elf", entry, user_stack_top, kernel_stack, heap_vaddr);
         serial_println!(
-            "exec: '{}' id={} entry=0x{:x} stack=0x{:x}",
-            name, id, entry, user_stack_top
+            "exec: '{}' id={} slot={} entry=0x{:x}",
+            name, id, slot, entry
         );
         Ok(id)
     }
