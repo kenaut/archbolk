@@ -7,6 +7,7 @@ const MSR_CSTAR: u32 = 0xC000_0083;
 const MSR_SF_MASK: u32 = 0xC000_0084;
 
 /// Syscall numbers (Linux x86-64 compatible subset).
+pub const SYS_READ: u64 = 0;
 pub const SYS_WRITE: u64 = 1;
 pub const SYS_BRK: u64 = 12;
 pub const SYS_SCHED_YIELD: u64 = 24;
@@ -124,6 +125,32 @@ pub extern "C" fn syscall_handler(frame: &mut SyscallFrame) {
     }
 
     match nr {
+        SYS_READ => {
+            // sys_read(fd, buf, count): read up to count bytes from serial.
+            // Returns the number of bytes read (0 if none available).
+            let _fd = frame.rdi as i32;
+            let buf = frame.rsi as *mut u8;
+            let count = frame.rdx as usize;
+            if _fd != 0 || count == 0 {
+                frame.rax = (-9isize) as u64; // -EBADF
+                return;
+            }
+            // Read one available byte with interrupts disabled while holding
+            // the serial lock (avoids the IRQ switch deadlock).
+            let flags: u64;
+            unsafe { asm!("pushfq; pop {0}; cli", out(reg) flags); }
+            let byte = crate::serial::SERIAL.lock().read_byte();
+            crate::serial::SERIAL.unlock();
+            unsafe { asm!("push {0}; popfq", in(reg) flags); }
+            match byte {
+                Some(b) => {
+                    unsafe { *buf = b; }
+                    frame.rax = 1;
+                }
+                None => frame.rax = 0,
+            }
+        }
+
         SYS_WRITE => {
             // sys_write(fd: i32, buf: *const u8, count: usize) -> isize
             let _fd = frame.rdi as i32;

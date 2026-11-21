@@ -225,6 +225,7 @@ static USER_SLOT_NEXT: core::sync::atomic::AtomicUsize = core::sync::atomic::Ato
 unsafe extern "C" {
     fn user_demo();
     fn user_worker();
+    fn user_shell();
 }
 
 /// Resolve a built-in user program name to its raw entry address.
@@ -235,6 +236,7 @@ fn user_program_entry(name: &str) -> Option<(usize, &'static str)> {
     match name {
         "demo" => Some((addr_of(user_demo), "demo")),
         "worker" => Some((addr_of(user_worker), "worker")),
+        "shell" => Some((addr_of(user_shell), "shell")),
         _ => None,
     }
 }

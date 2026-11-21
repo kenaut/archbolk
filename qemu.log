@@ -13,7 +13,7 @@ Memory map entries: 7
   [  6] base=0x000000fd00000000 len=0x0000000300000000 type=Reserved
 Lower memory: 639 KiB
 Upper memory: 129920 KiB
-Frame allocator: 32179 free frames (128716 KiB)
+Frame allocator: 32178 free frames (128712 KiB)
 Page tables: CR3 = 0x0000000000001000
   Extending identity map to 0x0000000008000000
   PML4[0] -> 0x0000000000002000
@@ -24,15 +24,15 @@ Heap: 64 KiB at 0x0000444400000000
 Heap test: Box<u64> = 42
 Heap test: Vec<u64> len = 100
 Heap allocation tests passed.
-module at 0x401000-0x403800 (10240 bytes)
-tarfs: initrd at 0x401000-0x403800 (10240 bytes)
+module at 0x402000-0x404800 (10240 bytes)
+tarfs: initrd at 0x402000-0x404800 (10240 bytes)
 Memory subsystem initialized.
-GDT/TSS: initialized (TSS at 0x22c088)
+GDT/TSS: initialized (TSS at 0x22d088)
 Interrupt subsystem initialized
-Syscall: entry at 0x11d912
+Syscall: entry at 0x11da92
 Keyboard: initialized
 Scheduler: initialized with 1 task(s)
-spawn_user: 'demo' id=2 slot=0 entry=0x20000000954
+spawn_user: 'demo' id=2 slot=0 entry=0x20000000ad4
 Scheduler ready. Type on the serial console:
 [init] Testing serial...
 [init] Testing serial input...
@@ -248,7 +248,11 @@ $ [task1] count=50000
 [task1] count=10350000
 [task1] count=10400000
 [task1] count=10450000
-[task1] count=10500000
+ls
+tarfs contents:
+  -  welcome.txt (71 bytes)
+  -  version.txt (91 bytes)
+$ [task1] count=10500000
 [task1] count=10550000
 [task1] count=10600000
 [task1] count=10650000
@@ -340,7 +344,10 @@ $ [task1] count=50000
 [task1] count=14950000
 [task1] count=15000000
 [task1] count=15050000
-[task1] count=15100000
+cat welcome.txt
+Welcome to archbolk!
+A freestanding Rust kernel with Ring 3 user mode.
+$ [task1] count=15100000
 [task1] count=15150000
 [task1] count=15200000
 [task1] count=15250000
@@ -431,7 +438,12 @@ $ [task1] count=50000
 [task1] count=19500000
 [task1] count=19550000
 [task1] count=19600000
-[task1] count=19650000
+ps
+  ID  NAME        STATE      RSP
+*  0  idle       Running   0x7ebe0
+   1  test1      Ready     0x16cf10
+   2  demo       Blocked   0x20000100d00 (dead)
+$ [task1] count=19650000
 [task1] count=19700000
 [task1] count=19750000
 [task1] count=19800000
@@ -522,8 +534,15 @@ $ [task1] count=50000
 [task1] count=24050000
 [task1] count=24100000
 [task1] count=24150000
-[task1] count=24200000
+spawn_user shell
+spawn_user: 'shell' id=3 slot=1 entry=0x20100000b71
+spawn_user: task 3 created
+$ [task1] count=24200000
 [task1] count=24250000
+$ h
+h=help e=echo t=time q=quit
+up$ q
+syscall: task 3 exit(0)
 [task1] count=24300000
 [task1] count=24350000
 [task1] count=24400000
@@ -889,4 +908,185 @@ $ [task1] count=50000
 [task1] count=42400000
 [task1] count=42450000
 [task1] count=42500000
-qemu-system-x86_64: terminating on signal 15 from pid 3124396 (timeout)
+[task1] count=42550000
+[task1] count=42600000
+[task1] count=42650000
+[task1] count=42700000
+[task1] count=42750000
+[task1] count=42800000
+[task1] count=42850000
+[task1] count=42900000
+[task1] count=42950000
+[task1] count=43000000
+[task1] count=43050000
+[task1] count=43100000
+[task1] count=43150000
+[task1] count=43200000
+[task1] count=43250000
+[task1] count=43300000
+[task1] count=43350000
+[task1] count=43400000
+[task1] count=43450000
+[task1] count=43500000
+[task1] count=43550000
+[task1] count=43600000
+[task1] count=43650000
+[task1] count=43700000
+[task1] count=43750000
+[task1] count=43800000
+[task1] count=43850000
+[task1] count=43900000
+[task1] count=43950000
+[task1] count=44000000
+[task1] count=44050000
+[task1] count=44100000
+[task1] count=44150000
+[task1] count=44200000
+[task1] count=44250000
+[task1] count=44300000
+[task1] count=44350000
+[task1] count=44400000
+[task1] count=44450000
+[task1] count=44500000
+[task1] count=44550000
+[task1] count=44600000
+[task1] count=44650000
+[task1] count=44700000
+[task1] count=44750000
+[task1] count=44800000
+[task1] count=44850000
+[task1] count=44900000
+[task1] count=44950000
+[task1] count=45000000
+[task1] count=45050000
+[task1] count=45100000
+[task1] count=45150000
+[task1] count=45200000
+[task1] count=45250000
+[task1] count=45300000
+[task1] count=45350000
+[task1] count=45400000
+[task1] count=45450000
+[task1] count=45500000
+[task1] count=45550000
+[task1] count=45600000
+[task1] count=45650000
+[task1] count=45700000
+[task1] count=45750000
+[task1] count=45800000
+[task1] count=45850000
+[task1] count=45900000
+[task1] count=45950000
+[task1] count=46000000
+[task1] count=46050000
+[task1] count=46100000
+[task1] count=46150000
+[task1] count=46200000
+[task1] count=46250000
+[task1] count=46300000
+[task1] count=46350000
+[task1] count=46400000
+[task1] count=46450000
+[task1] count=46500000
+[task1] count=46550000
+[task1] count=46600000
+[task1] count=46650000
+[task1] count=46700000
+[task1] count=46750000
+[task1] count=46800000
+[task1] count=46850000
+[task1] count=46900000
+[task1] count=46950000
+[task1] count=47000000
+[task1] count=47050000
+[task1] count=47100000
+[task1] count=47150000
+[task1] count=47200000
+[task1] count=47250000
+[task1] count=47300000
+[task1] count=47350000
+[task1] count=47400000
+[task1] count=47450000
+[task1] count=47500000
+[task1] count=47550000
+[task1] count=47600000
+[task1] count=47650000
+[task1] count=47700000
+[task1] count=47750000
+[task1] count=47800000
+[task1] count=47850000
+[task1] count=47900000
+[task1] count=47950000
+[task1] count=48000000
+[task1] count=48050000
+[task1] count=48100000
+[task1] count=48150000
+[task1] count=48200000
+[task1] count=48250000
+[task1] count=48300000
+[task1] count=48350000
+[task1] count=48400000
+[task1] count=48450000
+[task1] count=48500000
+[task1] count=48550000
+[task1] count=48600000
+[task1] count=48650000
+[task1] count=48700000
+[task1] count=48750000
+[task1] count=48800000
+[task1] count=48850000
+[task1] count=48900000
+[task1] count=48950000
+[task1] count=49000000
+[task1] count=49050000
+[task1] count=49100000
+[task1] count=49150000
+[task1] count=49200000
+[task1] count=49250000
+[task1] count=49300000
+[task1] count=49350000
+[task1] count=49400000
+[task1] count=49450000
+[task1] count=49500000
+[task1] count=49550000
+[task1] count=49600000
+[task1] count=49650000
+[task1] count=49700000
+[task1] count=49750000
+[task1] count=49800000
+[task1] count=49850000
+[task1] count=49900000
+[task1] count=49950000
+[task1] count=50000000
+[task1] count=50050000
+[task1] count=50100000
+[task1] count=50150000
+[task1] count=50200000
+[task1] count=50250000
+[task1] count=50300000
+[task1] count=50350000
+[task1] count=50400000
+[task1] count=50450000
+[task1] count=50500000
+[task1] count=50550000
+[task1] count=50600000
+[task1] count=50650000
+[task1] count=50700000
+[task1] count=50750000
+[task1] count=50800000
+[task1] count=50850000
+[task1] count=50900000
+[task1] count=50950000
+[task1] count=51000000
+[task1] count=51050000
+[task1] count=51100000
+[task1] count=51150000
+[task1] count=51200000
+[task1] count=51250000
+[task1] count=51300000
+[task1] count=51350000
+[task1] count=51400000
+[task1] count=51450000
+[task1] count=51500000
+[task1] count=51550000
+qemu-system-x86_64: terminating on signal 15 from pid 3154155 (timeout)

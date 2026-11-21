@@ -483,3 +483,138 @@ user_worker:
 
 worker_msg:
     .ascii "user_worker: hello there!\n"
+
+/* ── Ring-3 user shell ──────────────────────────────────────────────────
+ * Reads characters via sys_read, echoes them via sys_write, and handles a
+ * few one-letter commands on Enter:
+ *   h = help, e = echo <text>, t = uptime, q = quit (exit).
+ * The line buffer lives on the user stack.
+ */
+.globl user_shell
+user_shell:
+    sub rsp, 256                /* line buffer */
+    mov r12, rsp                /* buffer pointer */
+    xor r13, r13                /* index */
+
+.us_prompt:
+    mov rax, 1                  /* sys_write */
+    mov rdi, 1
+    lea rsi, [rip + us_prompt_msg]
+    mov rdx, 2
+    syscall
+
+.us_read:
+    mov rax, 0                  /* sys_read */
+    xor rdi, rdi
+    mov rsi, r12
+    add rsi, r13
+    mov rdx, 1
+    syscall
+    test rax, rax
+    jz .us_read                 /* no input yet, poll again */
+
+    mov al, [r12 + r13]
+    cmp al, 13                  /* Enter */
+    je .us_execute
+    cmp al, 10                  /* Enter (LF) */
+    je .us_execute
+    cmp al, 8                   /* Backspace */
+    je .us_backspace
+
+    /* Echo the character and store it. */
+    mov [r12 + r13], al
+    inc r13
+    cmp r13, 254
+    jge .us_execute
+    mov rax, 1
+    mov rdi, 1
+    mov rsi, r12
+    add rsi, r13
+    sub rsi, 1
+    mov rdx, 1
+    syscall
+    jmp .us_read
+
+.us_backspace:
+    test r13, r13
+    jz .us_read
+    dec r13
+    jmp .us_read
+
+.us_execute:
+    /* Print newline. */
+    mov rax, 1
+    mov rdi, 1
+    lea rsi, [rip + us_nl]
+    mov rdx, 1
+    syscall
+
+    test r13, r13
+    jz .us_prompt              /* empty line */
+
+    mov al, [r12]              /* first char = command */
+    cmp al, 'q'
+    je .us_quit
+    cmp al, 'h'
+    je .us_help
+    cmp al, 't'
+    je .us_uptime
+    cmp al, 'e'
+    je .us_echo
+    /* unknown */
+    mov rax, 1
+    mov rdi, 1
+    lea rsi, [rip + us_unknown]
+    mov rdx, 19
+    syscall
+    jmp .us_reset
+
+.us_help:
+    mov rax, 1
+    mov rdi, 1
+    lea rsi, [rip + us_help_msg]
+    mov rdx, 30
+    syscall
+    jmp .us_reset
+
+.us_uptime:
+    /* sys_nanosleep demo: just print a fixed message for now. */
+    mov rax, 1
+    mov rdi, 1
+    lea rsi, [rip + us_uptime_msg]
+    mov rdx, 18
+    syscall
+    jmp .us_reset
+
+.us_echo:
+    /* Echo the rest of the line (from index 1). */
+    cmp r13, 1
+    jbe .us_reset
+    mov rax, 1
+    mov rdi, 1
+    mov rsi, r12
+    add rsi, 1
+    mov rdx, r13
+    sub rdx, 1
+    syscall
+    jmp .us_reset
+
+.us_quit:
+    mov rax, 60                /* sys_exit */
+    xor rdi, rdi
+    syscall
+
+.us_reset:
+    xor r13, r13
+    jmp .us_prompt
+
+us_prompt_msg:
+    .ascii "$ "
+us_nl:
+    .ascii "\n"
+us_unknown:
+    .ascii "unknown command      \n"
+us_help_msg:
+    .ascii "h=help e=echo t=time q=quit\n"
+us_uptime_msg:
+    .ascii "uptime: (ring3)    \n"

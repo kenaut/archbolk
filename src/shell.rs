@@ -242,7 +242,7 @@ impl Shell {
         serial_println!("  spawn    — create a test task");
         serial_println!("  ls       — list initrd files");
         serial_println!("  cat <f>  — print a file from initrd");
-        serial_println!("  spawn_user <demo|worker> — spawn a ring-3 task");
+        serial_println!("  spawn_user <demo|worker|shell> — spawn a ring-3 task");
     }
 
     fn cmd_help(&self) {
