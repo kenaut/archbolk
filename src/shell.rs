@@ -176,11 +176,7 @@ impl Shell {
                 serial_print!("\n");
                 self.list_commands();
                 self.print_prompt();
-                let _ = core::fmt::Write::write_str(
-                    &mut *crate::serial::SERIAL.lock(),
-                    core::str::from_utf8(&self.line[..self.len]).unwrap_or(""),
-                );
-                crate::serial::SERIAL.unlock();
+                serial_print!("{}", core::str::from_utf8(&self.line[..self.len]).unwrap_or(""));
             }
             _ => {
                 // Printable character
@@ -221,6 +217,7 @@ impl Shell {
             "spawn" => self.cmd_spawn(),
             "ls" => self.cmd_ls(),
             "cat" => self.cmd_cat(args),
+            "spawn_user" => self.cmd_spawn_user(args),
             _ => {
                 serial_println!("shell: unknown command '{}'", cmd);
                 serial_println!("Try 'help'.");
@@ -245,6 +242,7 @@ impl Shell {
         serial_println!("  spawn    — create a test task");
         serial_println!("  ls       — list initrd files");
         serial_println!("  cat <f>  — print a file from initrd");
+        serial_println!("  spawn_user <demo|worker> — spawn a ring-3 task");
     }
 
     fn cmd_help(&self) {
@@ -438,6 +436,20 @@ impl Shell {
 
     fn cmd_ls(&self) {
         crate::fs::tarfs::list();
+    }
+
+    fn cmd_spawn_user(&self, mut args: core::str::SplitWhitespace) {
+        let name = match args.next() {
+            Some(n) => n,
+            None => {
+                serial_println!("usage: spawn_user <demo|worker>");
+                return;
+            }
+        };
+        match crate::spawn_user_program(name) {
+            Some(id) => serial_println!("spawn_user: task {} created", id),
+            None => serial_println!("spawn_user: unknown program or no slots left"),
+        }
     }
 
     fn cmd_cat(&self, mut args: core::str::SplitWhitespace) {

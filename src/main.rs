@@ -170,9 +170,16 @@ fn idle_task() -> ! {
         // Read one byte at a time, releasing the lock between each
         loop {
             let byte = {
+                let flags: u64;
+                unsafe {
+                    core::arch::asm!("pushfq; pop {0}; cli", out(reg) flags);
+                }
                 let serial = crate::serial::SERIAL.lock();
                 let b = serial.read_byte();
                 crate::serial::SERIAL.unlock();
+                unsafe {
+                    core::arch::asm!("push {0}; popfq", in(reg) flags);
+                }
                 b
             };
             match byte {
@@ -203,19 +210,50 @@ fn test_task_1() -> ! {
     }
 }
 
-/// Map the ring-3 demo's code page and a user stack, then spawn it.
-fn spawn_user_demo() {
+/// Base of the user address space (PML4[1], canonical low half).
+const USER_SPACE_BASE: usize = 0x200_0000_0000;
+/// Per-user-slot stride (one PDP = 1 GiB of virtual space).
+const USER_SLOT_STRIDE: usize = 0x1_0000_0000;
+/// Maximum number of concurrently spawned user programs.
+const MAX_USER_PROGRAMS: usize = 8;
+
+/// Preallocated kernel stacks for user tasks (ring-0 transitions).
+static mut USER_KERNEL_STACKS: [core::mem::MaybeUninit<[u8; 16384]>; MAX_USER_PROGRAMS] =
+    [const { core::mem::MaybeUninit::uninit() }; MAX_USER_PROGRAMS];
+static USER_SLOT_NEXT: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
+
+unsafe extern "C" {
+    fn user_demo();
+    fn user_worker();
+}
+
+/// Resolve a built-in user program name to its raw entry address.
+/// Computing the address here (in the same translation unit as the asm
+/// symbols) avoids function-pointer relocation issues under static relocs.
+fn user_program_entry(name: &str) -> Option<(usize, &'static str)> {
+    let addr_of = |f: unsafe extern "C" fn()| f as usize;
+    match name {
+        "demo" => Some((addr_of(user_demo), "demo")),
+        "worker" => Some((addr_of(user_worker), "worker")),
+        _ => None,
+    }
+}
+
+/// Map a user program into a fresh virtual slot and spawn it as a ring-3 task.
+/// Returns the task ID on success, or None if no slots remain.
+pub fn spawn_user_program(name: &str) -> Option<usize> {
     use memory::paging::{map_page, EntryFlags};
 
-    // Use PML4[1] (0x200_0000_0000) — a canonical low-half address with a
-    // fresh page-table hierarchy, avoiding the kernel's identity huge pages.
-    const USER_CODE_VADDR: usize = 0x200_0000_0000;
-    const USER_STACK_VADDR: usize = 0x200_0010_0000; // stack grows down from here
-    const USER_HEAP_VADDR: usize = 0x200_0020_0000; // heap for sys_brk
-
-    unsafe extern "C" {
-        fn user_demo();
+    let (entry_fn, prog_name) = user_program_entry(name)?;
+    let slot = USER_SLOT_NEXT.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+    if slot >= MAX_USER_PROGRAMS {
+        return None;
     }
+
+    let base = USER_SPACE_BASE + slot * USER_SLOT_STRIDE;
+    let code_vaddr = base;
+    let stack_vaddr = base + 0x10_0000;
+    let heap_vaddr = base + 0x20_0000;
 
     let mut user_flags = EntryFlags::new();
     user_flags.set(EntryFlags::PRESENT);
@@ -223,47 +261,44 @@ fn spawn_user_demo() {
     user_flags.set(EntryFlags::USER);
 
     unsafe {
-        // Map the page containing user_demo into user space at USER_CODE_VADDR.
-        let user_fn: unsafe extern "C" fn() = user_demo;
-        let user_addr = user_fn as usize;
-        let code_phys = user_addr & !0xfff;
-        let code_off = user_addr & 0xfff;
-        map_page(USER_CODE_VADDR, code_phys, user_flags);
+        let prog_addr = entry_fn;
+        let code_phys = prog_addr & !0xfff;
+        let code_off = prog_addr & 0xfff;
+        map_page(code_vaddr, code_phys, user_flags);
 
-        // Allocate and map one user-stack page.
         let stack_frame = memory::pfa::FRAME_ALLOCATOR
             .lock()
             .allocate()
             .expect("OOM: user stack");
-        map_page(USER_STACK_VADDR, stack_frame, user_flags);
-        let user_stack_top = USER_STACK_VADDR + 0x1000;
+        map_page(stack_vaddr, stack_frame, user_flags);
+        let user_stack_top = stack_vaddr + 0x1000;
 
-        // Map 4 pages of user heap for sys_brk experiments.
         for i in 0..4 {
             let frame = memory::pfa::FRAME_ALLOCATOR
                 .lock()
                 .allocate()
                 .expect("OOM: user heap");
-            map_page(USER_HEAP_VADDR + i * 0x1000, frame, user_flags);
+            map_page(heap_vaddr + i * 0x1000, frame, user_flags);
         }
 
-        // Kernel stack for ring-0 transitions (interrupt/syscall frames).
-        static mut USER_KERNEL_STACK: core::mem::MaybeUninit<[u8; 16384]> =
-            core::mem::MaybeUninit::uninit();
-        let kptr = core::ptr::addr_of_mut!(USER_KERNEL_STACK) as *mut u8;
-        let kernel_stack = core::slice::from_raw_parts_mut(kptr, 16384);
+        let kslot = USER_KERNEL_STACKS[slot].as_mut_ptr() as *mut u8;
+        let kernel_stack = core::slice::from_raw_parts_mut(kslot, 16384);
 
-        let entry = USER_CODE_VADDR + code_off;
+        let entry = code_vaddr + code_off;
         let id = scheduler::SCHEDULER
             .lock()
-            .spawn_user("user_demo", entry, user_stack_top, kernel_stack, USER_HEAP_VADDR);
+            .spawn_user(prog_name, entry, user_stack_top, kernel_stack, heap_vaddr);
         serial_println!(
-            "User demo spawned: id={} entry=0x{:x} ustack=0x{:x}",
-            id,
-            entry,
-            user_stack_top
+            "spawn_user: '{}' id={} slot={} entry=0x{:x}",
+            prog_name, id, slot, entry
         );
+        Some(id)
     }
+}
+
+/// Spawn the initial demo user program at boot.
+fn spawn_user_demo() {
+    spawn_user_program("demo");
 }
 
 /// Dynamically spawned worker: prints a periodic heartbeat until terminated.

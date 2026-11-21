@@ -113,6 +113,16 @@ fn wrmsr(msr: u32, value: u64) {
 pub extern "C" fn syscall_handler(frame: &mut SyscallFrame) {
     let nr = frame.rax;
 
+    // Ring-3 syscalls run on the user's stack. Defer context switches for the
+    // whole handler so an IRQ cannot switch this task out mid-syscall (which
+    // would strand the syscall frame on the user stack). nanosleep and exit
+    // manage DEFER themselves since they wait for the timer.
+    let from_user = (frame.rcx >> 37) & 1 == 1;
+    let defer_guard = from_user && nr != SYS_NANOSLEEP && nr != SYS_EXIT;
+    if defer_guard {
+        crate::scheduler::set_defer_schedule(true);
+    }
+
     match nr {
         SYS_WRITE => {
             // sys_write(fd: i32, buf: *const u8, count: usize) -> isize
@@ -211,5 +221,9 @@ pub extern "C" fn syscall_handler(frame: &mut SyscallFrame) {
             crate::serial_println!("syscall: unknown nr={}", nr);
             frame.rax = (-38isize) as u64; // -ENOSYS
         }
+    }
+
+    if defer_guard {
+        crate::scheduler::set_defer_schedule(false);
     }
 }

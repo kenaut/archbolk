@@ -82,12 +82,23 @@ pub static SERIAL: super::vga_buffer::SpinLock<SerialPort> =
     super::vga_buffer::SpinLock::new(SerialPort { port: 0x3F8 });
 
 /// Print formatted string to the serial port.
+///
+/// Interrupts are disabled for the whole lock→write→unlock sequence so a
+/// timer IRQ cannot switch tasks while the serial lock is held (which would
+/// deadlock when the next task also tries to print).
 #[macro_export]
 macro_rules! serial_print {
     ($($arg:tt)*) => {{
         use core::fmt::Write;
+        let _flags: u64;
+        unsafe {
+            core::arch::asm!("pushfq; pop {0}; cli", out(reg) _flags);
+        }
         $crate::serial::SERIAL.lock().write_fmt(format_args!($($arg)*)).unwrap();
         $crate::serial::SERIAL.unlock();
+        unsafe {
+            core::arch::asm!("push {0}; popfq", in(reg) _flags);
+        }
     }};
 }
 
